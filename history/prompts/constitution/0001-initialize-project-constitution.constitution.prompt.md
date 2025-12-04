@@ -1,14 +1,31 @@
-<!-- Sync Impact Report:
-Version change: Initial creation (N/A -> 0.1.0)
-Modified principles: All principles are newly defined.
-Added sections: Core Principles, Key Standards, Constraints, Success Criteria.
-Removed sections: N/A
-Templates requiring updates: To be checked in next step.
-Follow-up TODOs: N/A
--->
+---
+id: 0001
+title: Initialize Project Constitution
+stage: constitution
+date: 2025-12-04
+surface: agent
+model: claude-opus-4-5-20251101
+feature: none
+branch: master
+user: user
+command: /sp.constitution
+labels: ["constitution", "project-setup"]
+links:
+  spec: null
+  ticket: null
+  adr: null
+  pr: null
+files:
+- .specify/memory/constitution.md
+tests:
+
+---
+
+## Prompt
+
 **Project:**
 AI/Spec-Driven Book Creation — Build a complete book using **Docusaurus**, maintained with **Spec-Kit Plus**, written through **Claude Code**, and deployed to **GitHub Pages**.
-Book Theme: **Physical AI & Humanoid Robotics**
+Book Theme: **Physical AI & Humanoid Robotics** (or your final chosen title)
 
 ---
 

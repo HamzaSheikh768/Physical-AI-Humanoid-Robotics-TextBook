@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2025-12-04
-**Feature**: [Link to spec.md]
+**Feature**: `specs/1-book-ai-robotics/spec.md`
 
 ## Content Quality
 

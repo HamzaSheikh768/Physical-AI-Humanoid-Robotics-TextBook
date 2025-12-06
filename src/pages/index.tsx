@@ -7,6 +7,7 @@ import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
+import SignupForm from '../components/SignupForm';
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
@@ -18,14 +19,20 @@ function HomepageHeader() {
         </Heading>
         <p className="hero__subtitle">{siteConfig.tagline}</p>
         <div className={styles.buttons}>
+        <Link
+            className="button button--primary button--lg"
+            to="/docs/introduction">
+            Get Started 🚀
+          </Link>
           <Link
-            className="button button--secondary button--lg"
-            to="/docs/intro">
-            Docusaurus Tutorial - 5min ⏱️
+            className="button button--primary button--lg"
+            to="/docs/module-overviews/ros2">
+            Explore Modules 📚
           </Link>
         </div>
       </div>
     </header>
+    // <SignupForm />
   );
 }
 
@@ -33,7 +40,7 @@ export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
+      title={`${siteConfig.title}`}
       description="Description will go into a meta tag in <head />">
       <HomepageHeader />
       <main>

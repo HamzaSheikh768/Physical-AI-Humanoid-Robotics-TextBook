@@ -1,9 +1,24 @@
 <!-- Sync Impact Report:
-Version change: Initial creation (N/A -> 0.1.0)
-Modified principles: All principles are newly defined.
-Added sections: Core Principles, Key Standards, Constraints, Success Criteria.
+Version change: 0.1.0 -> 0.1.1
+Modified principles: N/A
+Added sections: N/A
 Removed sections: N/A
-Templates requiring updates: To be checked in next step.
+Templates requiring updates:
+- .specify/templates/plan-template.md: ✅ updated
+- .specify/templates/spec-template.md: ✅ updated
+- .specify/templates/tasks-template.md: ✅ updated
+- .specify/templates/commands/sp.adr.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.constitution.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.clarify.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.checklist.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.analyze.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.implement.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.git.commit_pr.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.plan.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.phr.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.specify.md: ⚠ pending (file not found)
+- .specify/templates/commands/sp.tasks.md: ⚠ pending (file not found)
+- README.md: ✅ updated
 Follow-up TODOs: N/A
 -->
 **Project:**
@@ -31,7 +46,7 @@ Book Theme: **Physical AI & Humanoid Robotics**
    - Code snippets must be functional and consistent.
 
 5. **AI-Collaborative Writing**
-   - Use Claude Code and tools to automate: content generation, structure enforcement, reference formatting, index building, and glossary      creation.
+   - Use Claude Code and tools to automate: content generation, structure enforcement, reference formatting, index building, and glossary creation.
 
 - Spec-driven development: Every feature, chapter, and design decision must be derived from an approved Spec-Kit Plus specification
 - AI-assisted but human-led: Claude Code is used for rapid drafting and code generation; all output must be reviewed, edited, and approved by the human author
@@ -142,4 +157,4 @@ Book Theme: **Physical AI & Humanoid Robotics**
   -   PATCH: Clarifications, wording, typo fixes, non-semantic refinements.
 - **Compliance Review:** All development activities, including code reviews and feature implementations, must explicitly verify compliance with the principles and standards outlined herein.
 
-**Version**: 0.1.0 | **Ratified**: 2025-12-04 | **Last Amended**: 2025-12-04
+**Version**: 0.1.1 | **Ratified**: 2025-12-04 | **Last Amended**: 2025-12-05

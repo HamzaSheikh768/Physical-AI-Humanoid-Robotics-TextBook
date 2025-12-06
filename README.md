@@ -39,3 +39,27 @@ GIT_USER=<Your GitHub username> yarn deploy
 ```
 
 If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+
+## Spec Management
+
+### Mark Spec as Complete
+
+To mark a feature specification file as 'Complete', use the `mark-spec-complete.js` script:
+
+```bash
+node .specify/scripts/mark-spec-complete.js specs/<feature-name>/spec.md
+```
+
+Replace `<feature-name>` with the actual directory name of your feature. For example:
+
+```bash
+node .specify/scripts/mark-spec-complete.js specs/1-spec-read-completion/spec.md
+```
+
+This will update the 'Status' field in the specified `spec.md` file to 'Complete'.
+
+### Generate Consolidated Spec Report
+
+A consolidated summary report of all `spec.md` files, including their paths, extracted status, and identified clarifications, was generated and displayed directly in the conversation. You can view the full report by reviewing the conversation history.
+
+

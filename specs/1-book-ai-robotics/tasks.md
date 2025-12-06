@@ -1,362 +1,156 @@
-# Tasks: Physical AI & Humanoid Robotics Book Creation
+# Implementation Tasks: Physical AI & Humanoid Robotics Book Creation
 
-**Input**: Design documents from `/specs/1-book-ai-robotics/`
-**Prerequisites**: `plan.md` (required), `spec.md` (required for user stories), `research.md`, `data-model.md`, `contracts/`
+**Branch**: `1-book-ai-robotics` | **Date**: 2025-12-05 | **Spec**: specs/1-book-ai-robotics/spec.md
+**Input**: Implementation plan from `specs/1-book-ai-robotics/plan.md`
 
-**Tests**: The feature specification does not explicitly request test tasks, so I will not include them.
+## Summary
 
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+This document outlines the step-by-step implementation tasks for the "Physical AI & Humanoid Robotics Book Creation" feature, organized by user story and development phase. Each task is designed to be independently executable, leading to a complete and testable increment of the feature.
 
-## Format: `[ID] [P?] [Story] Description`
+## Technical Context
 
--   **[P]**: Can run in parallel (different files, no dependencies)
--   **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
--   Include exact file paths in descriptions
+*   **Language/Version**: TypeScript/JavaScript (for Docusaurus, React), Python (for RAG chatbot backend, ROS 2 nodes, RL scripts).
+*   **Primary Dependencies**: Docusaurus v3+, React, Node.js, `rclpy` (ROS 2 Python client), FastAPI, OpenAI Agents/ChatKit SDKs, Neon Serverless Postgres, Qdrant Cloud Free Tier.
+*   **Project Structure**: New `docs/` content, `src/components/`, `src/auth-personalization/`, and `api/` directories.
 
-## Phase 1: Setup (Shared Infrastructure)
+## Dependencies
 
-**Purpose**: Project initialization and basic structure
+*   User Story 1 (Book Layout Setup) must be completed before other user stories are fully integrated for proper display.
+*   User Story 3 (RAG Chatbot Integration) foundational backend setup can run in parallel with US1, but frontend integration depends on Docusaurus layout.
+*   User Story 4 (Personalization Features) depends on foundational Docusaurus layout and authentication services.
+*   User Story 2 (High-Level Content Creation) can run in parallel with other stories after basic layout is done.
+*   User Story 5 (Capstone Autonomous Humanoid Coverage) depends on prior modules' content.
 
--   [ ] T001 Initialize Docusaurus project (FR-001) in `./`
--   [ ] T002 Configure `docusaurus.config.js` for sidebar navigation and basic layout (FR-003) in `docusaurus.config.js`
--   [ ] T003 Set up GitHub Actions workflow for building and deploying to GitHub Pages (SC-001, SC-002, FR-002) in `.github/workflows/deploy.yml`
--   [ ] T004 Create initial `Introduction` page (FR-003) in `docs/introduction.md`
--   [ ] T005 Create initial `Module Overviews` (empty markdown files for now) (FR-003) in `docs/modules/`
--   [ ] T006 Create initial `Weekly Breakdown` page (FR-003) in `docs/weekly-breakdown.md`
--   [ ] T007 Create initial `Learning Outcomes` page (FR-003) in `docs/learning-outcomes.md`
--   [ ] T008 Create initial `Assessments` page (FR-003) in `docs/assessments.md`
--   [ ] T009 Create initial `Hardware Requirements` page (FR-003) in `docs/hardware-requirements.md`
--   [ ] T010 Create initial `Capstone` page (FR-003) in `docs/capstone.md`
--   [ ] T011 Create initial `Conclusion` page (FR-003) in `docs/conclusion.md`
--   [ ] T012 Integrate Spec-Kit Plus templates and scripts for spec, plan, task, and PHR generation in `.specify/`
+## Parallel Execution Examples
 
----
-
-## Phase 2: Foundational (Blocking Prerequisites)
-
-**Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
-
-⚠️ **CRITICAL**: No user story work can begin until this phase is complete
-
--   [ ] T013 Create project base structure for Docusaurus content in `docs/` and `src/` (as per Docusaurus best practices)
-
-**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
-
----
-
-## Phase 3: User Story 1 - Set up Docusaurus Book Layout (Priority: P1) 🎯 MVP
-
-**Goal**: The core book structure and navigation set up in Docusaurus, deployed to GitHub Pages.
-
-**Independent Test**: The deployed book on GitHub Pages is navigable without errors, showing the defined structural elements.
-
-### Implementation for User Story 1
-
--   [ ] T014 [P] [US1] Refine `docusaurus.config.js` for accurate sidebar navigation structure in `docusaurus.config.js`
--   [ ] T015 [US1] Verify GitHub Actions workflow for build and deploy to GitHub Pages in `.github/workflows/deploy.yml`
--   [ ] T016 [P] [US1] Populate `docs/introduction.md` with high-level introductory content
--   [ ] T017 [P] [US1] Populate `docs/weekly-breakdown.md` with high-level content
--   [ ] T018 [P] [US1] Populate `docs/learning-outcomes.md` with high-level content
--   [ ] T019 [P] [US1] Populate `docs/assessments.md` with high-level content
--   [ ] T020 [P] [US1] Populate `docs/hardware-requirements.md` with high-level content
--   [ ] T021 [P] [US1] Populate `docs/capstone.md` with high-level content
--   [ ] T022 [P] [US1] Populate `docs/conclusion.md` with high-level content
-
-**Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
-
----
-
-## Phase 4: User Story 3 - High-Level Content for Core Modules (Priority: P2)
-
-**Goal**: High-level content (outlines, key concepts, expanded summaries, examples) for the four core modules to be available in the book, iterated twice for refinement.
-
-**Independent Test**: High-level content for all four modules is present, follows the specified iteration structure, and aligns with the chapter objectives.
-
-### Implementation for User Story 3
-
-**Iteration 1: Outlines & Key Concepts**
-
--   [ ] T023 [P] [US3] Create `introduction-to-ros2.md` in `docs/modules/ros2/introduction-to-ros2.md`
--   [ ] T024 [P] [US3] Populate `introduction-to-ros2.md` with outlines, core concepts, placeholder diagrams for ROS 2 Intro
--   [ ] T025 [P] [US3] Add initial references to official ROS 2 documentation in `introduction-to-ros2.md`
--   [ ] T026 [P] [US3] Create `urdf-and-robot-description.md` in `docs/modules/ros2/urdf-and-robot-description.md`
--   [ ] T027 [P] [US3] Populate `urdf-and-robot-description.md` with outlines, core concepts, placeholder diagrams for URDF
--   [ ] T028 [P] [US3] Add initial references to URDF documentation in `urdf-and-robot-description.md`
--   [ ] T029 [P] [US3] Create `ros2-python-packages.md` in `docs/modules/ros2/ros2-python-packages.md`
--   [ ] T030 [P] [US3] Populate `ros2-python-packages.md` with outlines, core concepts, placeholder diagrams for ROS 2 Python
--   [ ] T031 [P] [US3] Add initial references to ROS 2 Python Tutorials in `ros2-python-packages.md`
-
--   [ ] T032 [P] [US3] Create `physics-simulation-gazebo.md` in `docs/modules/digital-twin/physics-simulation-gazebo.md`
--   [ ] T033 [P] [US3] Populate `physics-simulation-gazebo.md` with outlines, core concepts, placeholder diagrams for Gazebo
--   [ ] T034 [P] [US3] Add initial references to Gazebo Documentation in `physics-simulation-gazebo.md`
--   [ ] T035 [P] [US3] Create `high-fidelity-visualization-unity.md` in `docs/modules/digital-twin/high-fidelity-visualization-unity.md`
--   [ ] T036 [P] [US3] Populate `high-fidelity-visualization-unity.md` with outlines, core concepts, placeholder diagrams for Unity
--   [ ] T037 [P] [US3] Add initial references to Unity Documentation in `high-fidelity-visualization-unity.md`
--   [ ] T038 [P] [US3] Create `sensor-simulation.md` in `docs/modules/digital-twin/sensor-simulation.md`
--   [ ] T039 [P] [US3] Populate `sensor-simulation.md` with outlines, core concepts, placeholder diagrams for Sensor Simulation
--   [ ] T040 [P] [US3] Add initial references to sensor documentation in `sensor-simulation.md`
-
--   [ ] T041 [P] [US3] Create `isaac-sim-synthetic-data.md` in `docs/modules/nvidia-isaac/isaac-sim-synthetic-data.md`
--   [ ] T042 [P] [US3] Populate `isaac-sim-synthetic-data.md` with outlines, core concepts, placeholder diagrams for Isaac Sim
--   [ ] T043 [P] [US3] Add initial references to NVIDIA Isaac Sim SDK in `isaac-sim-synthetic-data.md`
--   [ ] T044 [P] [US3] Create `navigation-vslam.md` in `docs/modules/nvidia-isaac/navigation-vslam.md`
--   [ ] T045 [P] [US3] Populate `navigation-vslam.md` with outlines, core concepts, placeholder diagrams for Navigation/VSLAM
--   [ ] T046 [P] [US3] Add initial references to Isaac ROS Documentation in `navigation-vslam.md`
--   [ ] T047 [P] [US3] Create `rl-humanoid-locomotion.md` in `docs/modules/nvidia-isaac/rl-humanoid-locomotion.md`
--   [ ] T048 [P] [US3] Populate `rl-humanoid-locomotion.md` with outlines, core concepts, placeholder diagrams for RL Humanoid Locomotion
--   [ ] T049 [P] [US3] Add initial references to RL literature in `rl-humanoid-locomotion.md`
-
--   [ ] T050 [P] [US3] Create `voice-to-action-whisper.md` in `docs/modules/vla/voice-to-action-whisper.md`
--   [ ] T051 [P] [US3] Populate `voice-to-action-whisper.md` with outlines, core concepts, placeholder diagrams for Voice-to-Action
--   [ ] T052 [P] [US3] Add initial references to OpenAI Whisper Documentation in `voice-to-action-whisper.md`
--   [ ] T053 [P] [US3] Create `cognitive-planning-llms.md` in `docs/modules/vla/cognitive-planning-llms.md`
--   [ ] T054 [P] [US3] Populate `cognitive-planning-llms.md` with outlines, core concepts, placeholder diagrams for Cognitive Planning
--   [ ] T055 [P] [US3] Add initial references to OpenAI GPT API Documentation in `cognitive-planning-llms.md`
--   [ ] T056 [P] [US3] Create `capstone-autonomous-humanoid.md` in `docs/modules/vla/capstone-autonomous-humanoid.md`
--   [ ] T057 [P] [US3] Populate `capstone-autonomous-humanoid.md` with outlines, core concepts, placeholder diagrams for Capstone Autonomous Humanoid
--   [ ] T058 [P] [US3] Add initial references to Capstone related documentation in `capstone-autonomous-humanoid.md`
-
-**Iteration 2: Expanded Summaries & Examples**
-
--   [ ] T059 [US3] Expand `introduction-to-ros2.md` with detailed summaries and basic code examples
--   [ ] T060 [US3] Convert placeholder diagrams to Mermaid/static images in `introduction-to-ros2.md`
--   [ ] T061 [US3] Refine references in `introduction-to-ros2.md` to meet 40% peer-reviewed research target
--   [ ] T062 [US3] Expand `urdf-and-robot-description.md` with detailed summaries and basic code examples
--   [ ] T063 [US3] Convert placeholder diagrams to Mermaid/static images in `urdf-and-robot-description.md`
--   [ ] T064 [US3] Refine references in `urdf-and-robot-description.md` to meet 40% peer-reviewed research target
--   [ ] T065 [US3] Expand `ros2-python-packages.md` with detailed summaries and basic code examples
--   [ ] T066 [US3] Convert placeholder diagrams to Mermaid/static images in `ros2-python-packages.md`
--   [ ] T067 [US3] Refine references in `ros2-python-packages.md` to meet 40% peer-reviewed research target
-
--   [ ] T068 [US3] Expand `physics-simulation-gazebo.md` with detailed summaries and basic code examples
--   [ ] T069 [US3] Convert placeholder diagrams to Mermaid/static images in `physics-simulation-gazebo.md`
--   [ ] T070 [US3] Refine references in `physics-simulation-gazebo.md` to meet 40% peer-reviewed research target
--   [ ] T071 [US3] Expand `high-fidelity-visualization-unity.md` with detailed summaries and basic code examples
--   [ ] T072 [US3] Convert placeholder diagrams to Mermaid/static images in `high-fidelity-visualization-unity.md`
--   [ ] T073 [US3] Refine references in `high-fidelity-visualization-unity.md` to meet 40% peer-reviewed research target
--   [ ] T074 [US3] Expand `sensor-simulation.md` with detailed summaries and basic code examples
--   [ ] T075 [US3] Convert placeholder diagrams to Mermaid/static images in `sensor-simulation.md`
--   [ ] T076 [US3] Refine references in `sensor-simulation.md` to meet 40% peer-reviewed research target
-
--   [ ] T077 [US3] Expand `isaac-sim-synthetic-data.md` with detailed summaries and basic code examples
--   [ ] T078 [US3] Convert placeholder diagrams to Mermaid/static images in `isaac-sim-synthetic-data.md`
--   [ ] T079 [US3] Refine references in `isaac-sim-synthetic-data.md` to meet 40% peer-reviewed research target
--   [ ] T080 [US3] Expand `navigation-vslam.md` with detailed summaries and basic code examples
--   [ ] T081 [US3] Convert placeholder diagrams to Mermaid/static images in `navigation-vslam.md`
--   [ ] T082 [US3] Refine references in `navigation-vslam.md` to meet 40% peer-reviewed research target
--   [ ] T083 [US3] Expand `rl-humanoid-locomotion.md` with detailed summaries and basic code examples
--   [ ] T084 [US3] Convert placeholder diagrams to Mermaid/static images in `rl-humanoid-locomotion.md`
--   [ ] T085 [US3] Refine references in `rl-humanoid-locomotion.md` to meet 40% peer-reviewed research target
-
--   [ ] T086 [US3] Expand `voice-to-action-whisper.md` with detailed summaries and basic code examples
--   [ ] T087 [US3] Convert placeholder diagrams to Mermaid/static images in `voice-to-action-whisper.md`
--   [ ] T088 [US3] Refine references in `voice-to-action-whisper.md` to meet 40% peer-reviewed research target
--   [ ] T089 [US3] Expand `cognitive-planning-llms.md` with detailed summaries and basic code examples
--   [ ] T090 [US3] Convert placeholder diagrams to Mermaid/static images in `cognitive-planning-llms.md`
--   [ ] T091 [US3] Refine references in `cognitive-planning-llms.md` to meet 40% peer-reviewed research target
--   [ ] T092 [US3] Expand `capstone-autonomous-humanoid.md` with detailed summaries and basic code examples
--   [ ] T093 [US3] Convert placeholder diagrams to Mermaid/static images in `capstone-autonomous-humanoid.md`
--   [ ] T094 [US3] Refine references in `capstone-autonomous-humanoid.md` to meet 40% peer-reviewed research target
-
--   [ ] T095 [US3] Perform initial internal review for clarity, accuracy, and adherence to constitution standards
-
-**Checkpoint**: At this point, User Stories 1 AND 3 should both work independently
-
----
-
-## Phase 5: User Story 2 - Integrated RAG Chatbot for Content Q&A (Priority: P1)
-
-**Goal**: An integrated RAG chatbot embedded within the book content, so that a user can ask questions about the book's content and receive accurate answers, including user-selected text for context.
-
-**Independent Test**: The chatbot can accurately answer questions based on the book's content when queried.
-
-### Implementation for User Story 2
-
--   [ ] T096 [US2] Set up FastAPI project (FR-004) in `backend/`
--   [ ] T097 [US2] Configure Neon Serverless Postgres database (FR-004) in `backend/config/database.py` (or similar)
--   [ ] T098 [US2] Integrate Qdrant Cloud Free Tier for vector embeddings of book content (FR-004) in `backend/services/qdrant.py` (or similar)
--   [ ] T099 [US2] Develop RAG logic using OpenAI Agents/ChatKit SDKs (FR-004) in `backend/services/rag.py` (or similar)
--   [ ] T100 [US2] Create Docusaurus plugin/component to embed the chatbot UI (FR-004) in `src/components/Chatbot.js` (or similar)
--   [ ] T101 [US2] Implement functionality to use user-selected text as context for chatbot queries (FR-005) in `src/components/Chatbot.js` and `backend/api/chatbot.py` (or similar)
--   [ ] T102 [US2] Develop initial tests for chatbot accuracy (SC-003) in `backend/tests/test_chatbot.py`
-
-**Checkpoint**: At this point, User Stories 1, 3, and 2 should all work independently
-
----
-
-## Phase 6: User Story 4 - Signup/Signin with Personalization (Priority: P3)
-
-**Goal**: Logged-in users can sign up/sign in with Better Auth and answer background questions on software/hardware, to experience personalized content.
-
-**Independent Test**: Users can successfully sign up/sign in, provide background information, and observe personalized content (once personalization is implemented).
-
-### Implementation for User Story 4
-
--   [ ] T103 [US4] Implement signup/signin functionality with Better Auth (FR-007) in `backend/auth/` and `src/components/Auth.js` (or similar)
--   [ ] T104 [US4] Add background questions for user personalization during signup (FR-007) in `backend/auth/` and `src/components/Auth.js` (or similar)
--   [ ] T105 [US4] Develop chapter personalization button logic for logged-in users (FR-008) in `src/components/PersonalizationButton.js` (or similar)
-
-**Checkpoint**: At this point, User Stories 1, 3, 2, and 4 should all work independently
-
----
-
-## Phase 7: User Story 5 - Urdu Translation Button per Chapter (Priority: P3)
-
-**Goal**: A button to translate each chapter into Urdu, so that the content can be read in a preferred language.
-
-**Independent Test**: Clicking the button provides an Urdu translation of the chapter.
-
-### Implementation for User Story 5
-
--   [ ] T106 [US5] Integrate Urdu translation service (e.g., a simple API call) in `backend/services/translation.py` (or similar)
--   [ ] T107 [US5] Develop a button for Urdu translation per chapter (FR-009) in `src/components/UrduTranslationButton.js` (or similar)
--   [ ] T108 [US5] Implement logic to display translated content in `src/theme/DocItem/Content/index.js` (or similar)
-
-**Checkpoint**: At this point, User Stories 1, 3, 2, 4, and 5 should all work independently
-
----
-
-## Phase 8: User Story 6 - Reusable Claude Code Subagents and Agent Skills (Priority: P3)
-
-**Goal**: Reusable Claude Code subagents and agent skills to be available, so that functionality can be extended and tasks automated within the project.
-
-**Independent Test**: The subagents and agent skills are accessible and perform their intended functions.
-
-### Implementation for User Story 6
-
--   [ ] T109 [US6] Define spec for a simple Claude Code subagent (FR-006) in `.claude/agents/my-subagent.json`
--   [ ] T110 [US6] Implement a simple Claude Code subagent (FR-006) in `.claude/agents/my-subagent/index.js` (or similar)
--   [ ] T111 [US6] Define spec for a simple Claude Code agent skill (FR-006) in `.claude/skills/my-skill.json`
--   [ ] T112 [US6] Implement a simple Claude Code agent skill (FR-006) in `.claude/skills/my-skill/index.js` (or similar)
-
-**Checkpoint**: At this point, User Stories 1, 3, 2, 4, 5, and 6 should all work independently
-
----
-
-## Phase 9: User Story 7 - Capstone Autonomous Humanoid Coverage (Priority: P3)
-
-**Goal**: Understand the concepts of an autonomous humanoid simulation with voice commands, path planning, and object manipulation, as covered by the Capstone project.
-
-**Independent Test**: The Capstone chapter clearly explains the integration of ROS 2, Isaac, sensors, and VLA in an end-to-end simulation.
-
-### Implementation for User Story 7
-
--   [ ] T113 [US7] Review and refine Capstone Autonomous Humanoid content in `docs/capstone.md` (FR-012)
--   [ ] T114 [US7] Ensure Capstone chapter clearly explains integration of ROS 2, Isaac, sensors, VLA (FR-012)
--   [ ] T115 [US7] Add workflow diagram for Capstone (Mermaid) in `docs/capstone.md`
-
-**Checkpoint**: All user stories should now be independently functional
-
----
-
-## Phase 10: Polish & Cross-Cutting Concerns
-
-**Purpose**: Improvements that affect multiple user stories
-
--   [ ] T116 Perform comprehensive end-to-end testing, including mobile responsiveness (SC-009)
--   [ ] T117 Conduct final content review against all success criteria (SC-008)
--   [ ] T118 Prepare project for final deployment and documentation in `README.md` and `docs/deployment.md`
--   [ ] T119 Update `package.json` with necessary scripts for building and deploying.
--   [ ] T120 Final check for all claims and technical details supported by references to official docs (FR-014)
--   [ ] T121 Ensure all book content follows Spec-Kit Plus markdown format (FR-013)
--   [ ] T122 Ensure all technical claims follow APA 7 citation style for text and references (FR-015)
-
----
-
-## Dependencies & Execution Order
-
-### Phase Dependencies
-
--   **Setup (Phase 1)**: No dependencies - can start immediately
--   **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
--   **User Stories (Phases 3-9)**: All depend on Foundational phase completion
-    -   User stories can then proceed in parallel (if staffed)
-    -   Or sequentially in priority order (P1 → P2 → P3)
--   **Polish (Final Phase)**: Depends on all desired user stories being complete
-
-### User Story Dependencies
-
--   **User Story 1 (P1 - Layout)**: Can start after Foundational (Phase 2) - No dependencies on other stories
--   **User Story 3 (P2 - Core Content)**: Can start after Foundational (Phase 2) - No dependencies on other stories
--   **User Story 2 (P1 - Chatbot)**: Can start after Foundational (Phase 2) - No dependencies on other stories
--   **User Story 4 (P3 - Personalization)**: Can start after Foundational (Phase 2) - No dependencies on other stories
--   **User Story 5 (P3 - Urdu Translation)**: Can start after Foundational (Phase 2) - No dependencies on other stories
--   **User Story 6 (P3 - Subagents/Skills)**: Can start after Foundational (Phase 2) - No dependencies on other stories
--   **User Story 7 (P3 - Capstone Coverage)**: Can start after Foundational (Phase 2) - No dependencies on other stories
-
-### Within Each User Story
-
--   Models before services
--   Services before endpoints
--   Core implementation before integration
--   Story complete before moving to next priority
-
-### Parallel Opportunities
-
--   All Setup tasks marked [P] can run in parallel
--   All Foundational tasks marked [P] can run in parallel (within Phase 2)
--   Once Foundational phase completes, all user stories can start in parallel (if team capacity allows)
--   All tasks within content iterations marked [P] can run in parallel.
--   Different user stories can be worked on in parallel by different team members
-
----
-
-## Parallel Example: User Story 1 (P1 - Layout)
-
-```powershell
-# Example of parallel tasks within User Story 1:
-# Populate various initial content pages in parallel
-Task: "Populate docs/introduction.md with high-level introductory content"
-Task: "Populate docs/weekly-breakdown.md with high-level content"
-Task: "Populate docs/learning-outcomes.md with high-level content"
-```
-
----
+*   **During Setup**:
+    *   Creating Docusaurus content files (`docs/`) can be done in parallel with setting up FastAPI backend (`api/`).
+*   **During US1 (Book Layout Setup)**:
+    *   Configuring Docusaurus sidebar navigation can be done in parallel with implementing GitHub Pages deployment.
+*   **During US3 (RAG Chatbot Integration)**:
+    *   Setting up Neon Postgres and Qdrant can be done in parallel.
+    *   Implementing FastAPI models and database connection can be done in parallel.
+*   **During US4 (Personalization Features)**:
+    *   Implementing `AuthService` and `PersonalizationService` can be done in parallel.
+    *   Developing `SignupForm`, `SigninForm`, and `BackgroundQuestionsForm` can be done in parallel.
 
 ## Implementation Strategy
 
-### MVP First (User Story 1 Only)
+The implementation will follow an iterative approach, focusing on delivering core functionality (P1 user stories) first, followed by enhancements (P2 user stories) and cross-cutting concerns. Each user story will be developed in a way that allows for independent testing.
 
-1.  Complete Phase 1: Setup
-2.  Complete Phase 2: Foundational (CRITICAL - blocks all stories)
-3.  Complete Phase 3: User Story 1
-4.  **STOP and VALIDATE**: Test User Story 1 independently
-5.  Deploy/demo if ready
+## Phase 1: Setup
 
-### Incremental Delivery
+*   **Goal**: Initialize Docusaurus project and configure basic infrastructure.
+*   **Independent Test**: Docusaurus site builds locally without errors.
 
-1.  Complete Setup + Foundational → Foundation ready
-2.  Add User Story 1 (Layout) → Test independently → Deploy/Demo (MVP!)
-3.  Add User Story 3 (Core Content) → Test independently → Deploy/Demo
-4.  Add User Story 2 (RAG Chatbot) → Test independently → Deploy/Demo
-5.  Add User Story 4 (Personalization) → Test independently → Deploy/Demo
-6.  Add User Story 5 (Urdu Translation) → Test independently → Deploy/Demo
-7.  Add User Story 6 (Subagents/Skills) → Test independently → Deploy/Demo
-8.  Add User Story 7 (Capstone Coverage) → Test independently → Deploy/Demo
-9.  Each story adds value without breaking previous stories
+- [ ] T001 Verify Docusaurus project scaffolding (already done: see git log and file structure)
+- [ ] T002 Configure Docusaurus `docusaurus.config.ts` for basic layout and theme (sidebar, navbar)
+- [ ] T003 Set up GitHub Pages deployment workflow in `.github/workflows/deploy.yml`
 
-### Parallel Team Strategy
+## Phase 2: Foundational
 
-With multiple developers:
+*   **Goal**: Establish core directory structures and define shared types.
+*   **Independent Test**: Required directories exist, and `types.ts` defines expected interfaces.
 
-1.  Team completes Setup + Foundational together
-2.  Once Foundational is done:
-    -   Developer A: User Story 1 (Layout)
-    -   Developer B: User Story 3 (Core Content)
-    -   Developer C: User Story 2 (RAG Chatbot)
-    -   Developer D: User Story 4 (Personalization)
-    -   Developer E: User Story 5 (Urdu Translation)
-    -   Developer F: User Story 6 (Subagents/Skills)
-    -   Developer G: User Story 7 (Capstone Coverage)
-3.  Stories complete and integrate independently
+- [ ] T004 Create `src/auth-personalization/` directory
+- [ ] T005 Create `src/auth-personalization/api/` directory
+- [ ] T006 Create `src/auth-personalization/context/` directory
+- [ ] T007 Create `src/auth-personalization/types.ts`
+- [ ] T008 Define `User` and `PersonalizationPreference` interfaces/types in `src/auth-personalization/types.ts`
+- [ ] T009 Create `api/` directory for FastAPI backend
+- [ ] T010 Create `scripts/` directory for utility scripts
 
----
+## Phase 3: User Story 1 - Book Layout Setup (P1)
 
-## Notes
+*   **Goal**: Set up the complete Docusaurus book layout with navigation and deployable to GitHub Pages.
+*   **Independent Test**: The deployed Docusaurus site is accessible via GitHub Pages, all primary navigation links are functional, and no errors are present in the browser console.
 
--   [P] tasks = different files, no dependencies
--   [Story] label maps task to specific user story for traceability
--   Each user story should be independently completable and testable
--   Commit after each task or logical group
--   Stop at any checkpoint to validate story independently
--   Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+- [ ] T011 [US1] Create `docs/introduction.md`
+- [ ] T012 [US1] Create `docs/module-overviews/ros2.md`
+- [ ] T013 [US1] Create `docs/module-overviews/digital-twin.md`
+- [ ] T014 [US1] Create `docs/module-overviews/ai-robot-brain.md`
+- [ ] T015 [US1] Create `docs/module-overviews/vla.md`
+- [ ] T016 [US1] Create `docs/weekly-breakdown.md`
+- [ ] T017 [US1] Create `docs/learning-outcomes.md`
+- [ ] T018 [US1] Create `docs/assessments.md`
+- [ ] T019 [US1] Create `docs/hardware-requirements.md`
+- [ ] T020 [US1] Create `docs/capstone.md`
+- [ ] T021 [US1] Create `docs/conclusion.md`
+- [ ] T022 [US1] Configure Docusaurus `sidebars.ts` for comprehensive navigation including all new `docs/` files
+- [ ] T023 [US1] Test Docusaurus build locally to ensure all new `docs/` content is integrated without errors
+- [ ] T024 [US1] Deploy Docusaurus site to GitHub Pages and verify accessibility and navigation
+
+## Phase 4: User Story 3 - RAG Chatbot Integration (P1)
+
+*   **Goal**: Incorporate a functional RAG chatbot for content-based Q&A within the book.
+*   **Independent Test**: The RAG chatbot UI is visible, and it provides accurate answers to book content queries.
+
+- [ ] T025 [P] [US3] Set up Neon Serverless Postgres instance and obtain connection details
+- [ ] T026 [P] [US3] Set up Qdrant Cloud Free Tier instance and obtain API key/URL
+- [ ] T027 [US3] Create `api/models.py` for RAG chatbot data structures (e.g., `Document`, `Query`)
+- [ ] T028 [US3] Implement database connection and ORM setup in `api/database.py` (for Neon Postgres)
+- [ ] T029 [US3] Develop FastAPI endpoint for RAG chatbot query processing in `api/main.py`
+- [ ] T030 [US3] Implement Qdrant vector store integration in `api/main.py`
+- [ ] T031 [US3] Integrate OpenAI Agents/ChatKit SDKs into `api/main.py` for RAG logic
+- [ ] T032 [US3] Create `src/components/RAGChatbot.tsx` for the chatbot UI
+- [ ] T033 [US3] Integrate `RAGChatbot.tsx` into Docusaurus layout (e.g., `src/theme/Layout/index.js` or a specific content page)
+- [ ] T034 [US3] Develop `scripts/index-book-content.py` to index Docusaurus content into Qdrant
+
+## Phase 5: User Story 2 - High-Level Content Creation (P1) (Iterative)
+
+*   **Goal**: Populate the core modules with high-level content in two iterations.
+*   **Independent Test**: Markdown files for each module contain outlines, key concepts, expanded summaries, and examples with 3-5 key subsections.
+
+### Iteration 1: Outlines and Key Concepts
+
+- [ ] T035 [P] [US2] Write outline and core concepts for ROS 2 module in `docs/module-overviews/ros2.md`
+- [ ] T036 [P] [US2] Write outline and core concepts for Digital Twin module in `docs/module-overviews/digital-twin.md`
+- [ ] T037 [P] [US2] Write outline and core concepts for AI-Robot Brain module in `docs/module-overviews/ai-robot-brain.md`
+- [ ] T038 [P] [US2] Write outline and core concepts for VLA module in `docs/module-overviews/vla.md`
+
+### Iteration 2: Expanded Summaries and Examples
+
+- [ ] T039 [P] [US2] Expand ROS 2 module content with summaries and examples in `docs/module-overviews/ros2.md`
+- [ ] T040 [P] [US2] Expand Digital Twin module content with summaries and examples in `docs/module-overviews/digital-twin.md`
+- [ ] T041 [P] [US2] Expand AI-Robot Brain module content with summaries and examples in `docs/module-overviews/ai-robot-brain.md`
+- [ ] T042 [P] [US2] Expand VLA module content with summaries and examples in `docs/module-overviews/vla.md`
+
+## Phase 6: User Story 4 - Personalization Features (P2)
+
+*   **Goal**: Implement signup/signin with background questions, a chapter personalization button, and Urdu translation.
+*   **Independent Test**: User is prompted with background questions after signup/signin, personalization button adjusts content, and Urdu translation button translates content.
+
+- [ ] T043 [US4] Implement `authService.ts` in `src/auth-personalization/api/authService.ts` for Better Auth integration
+- [ ] T044 [US4] Implement `personalizationService.ts` in `src/auth-personalization/context/personalizationService.ts` for client-side storage
+- [ ] T045 [US4] Create `AuthContext.tsx` and `useAuth` hook in `src/auth-personalization/context/AuthContext.tsx`
+- [ ] T046 [US4] Create `PersonalizationContext.tsx` and `usePersonalization` hook in `src/auth-personalization/context/PersonalizationContext.tsx`
+- [ ] T047 [US4] Develop `SignupForm.tsx` component in `src/components/SignupForm.tsx`
+- [ ] T048 [US4] Develop `SigninForm.tsx` component in `src/components/SigninForm.tsx`
+- [ ] T049 [US4] Develop `BackgroundQuestionsForm.tsx` component in `src/components/BackgroundQuestionsForm.tsx`
+- [ ] T050 [US4] Integrate `AuthService` into `SignupForm.tsx` and `SigninForm.tsx`
+- [ ] T051 [US4] Integrate `PersonalizationService` and `BackgroundQuestionsForm.tsx` into signup flow (e.g., after successful registration)
+- [ ] T052 [US4] Create `AuthButton.tsx` component in `src/components/AuthButton.tsx` for conditional display
+- [ ] T053 [US4] Update Docusaurus layout (e.g., `src/theme/Layout/index.js`) to include `AuthContext` and `PersonalizationContext` providers
+- [ ] T054 [US4] Develop `PersonalizationOptions.tsx` UI component in `src/components/PersonalizationOptions.tsx`
+- [ ] T055 [US4] Implement conditional content display based on personalization preferences in `docs/introduction.md` (as an example)
+- [ ] T056 [US4] Develop `UrduTranslationButton.tsx` component in `src/components/UrduTranslationButton.tsx`
+- [ ] T057 [US4] Implement Urdu translation logic for chapter content (e.g., using a translation service or pre-translated content)
+
+## Phase 7: User Story 5 - Capstone Autonomous Humanoid Coverage (P2)
+
+*   **Goal**: Describe the end-to-end pipeline for an autonomous humanoid robot in simulation.
+*   **Independent Test**: The capstone chapter clearly describes the integration of all components with illustrative examples and diagrams.
+
+- [ ] T058 [US5] Write comprehensive content for the `docs/capstone.md` chapter
+- [ ] T059 [US5] Include detailed examples and conceptual code snippets for voice commands, path planning, and object manipulation
+- [ ] T060 [US5] Incorporate Mermaid diagrams or references to static images for workflow visualization
+
+## Phase 8: Polish & Cross-Cutting Concerns
+
+*   **Goal**: Ensure overall quality, test coverage, and documentation.
+*   **Independent Test**: All tests pass, codebase is clean, and documentation is up-to-date.
+
+- [ ] T061 Update `README.md` with instructions on how to set up and run the new book feature, RAG chatbot, and personalization
+- [ ] T062 Run all unit and integration tests for authentication and personalization modules
+- [ ] T063 Perform code cleanup and refactoring across `src/components/`, `src/auth-personalization/`, and `api/`
+- [ ] T064 Conduct a security review of client-side personalization storage and Better Auth integration

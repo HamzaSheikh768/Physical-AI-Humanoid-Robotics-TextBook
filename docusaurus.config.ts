@@ -16,14 +16,14 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: "https://anthropic.github.io",
+  url: "https://hamzasheikh768.github.io",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: "/physical-ai-humanoid-robotics-textbook/", 
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: "anthropic", // Usually your GitHub org/user name.
+  organizationName: "hamzasheikh768", // Usually your GitHub org/user name.
   projectName: "physical-ai-humanoid-robotics-textbook", // Usually your repo name.
 
   onBrokenLinks: "throw",
@@ -45,7 +45,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            "https://github.com/anthropic/physical-ai-humanoid-robotics-textbook/tree/main/",
+            "https://github.com/hamzasheikh768/physical-ai-humanoid-robotics-textbook/tree/main/",
         },
         blog: {
           showReadingTime: true,
@@ -56,7 +56,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            "https://github.com/anthropic/physical-ai-humanoid-robotics-textbook/tree/main/",
+            "https://github.com/hamzasheikh768/physical-ai-humanoid-robotics-textbook/tree/main/",
           // Useful options to enforce blogging best practices
           onInlineTags: "warn",
           onInlineAuthors: "warn",
@@ -124,7 +124,7 @@ const config: Config = {
         // },
         { to: "/docs/introduction", label: "Book", position: "left" },
         {
-          href: "https://github.com/anthropic/physical-ai-humanoid-robotics-textbook/",
+          href: "https://github.com/hamzasheikh768/physical-ai-humanoid-robotics-textbook/",
           label: "GitHub",
           position: "right",
         },
@@ -184,7 +184,7 @@ const config: Config = {
           items: [
             {
               label: "GitHub",
-              href: "https://github.com/anthropic/physical-ai-humanoid-robotics-textbook/",
+              href: "https://github.com/hamzasheikh768/physical-ai-humanoid-robotics-textbook/",
             },
           ],
         },

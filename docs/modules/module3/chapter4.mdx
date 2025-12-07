@@ -12,7 +12,6 @@ keywords: ["Robot Navigation", "Path Planning", "Motion Planning", "Obstacle Avo
 ## Learning Objectives
 
 By the end of this chapter, you will be able to:
-- Understand the fundamental differences between planning in digital and physical systems
 - Implement classical and modern pathfinding algorithms for robotic navigation
 - Design motion planning systems that account for robot dynamics and constraints
 - Apply obstacle avoidance techniques for safe navigation in dynamic environments
@@ -22,32 +21,45 @@ By the end of this chapter, you will be able to:
 
 ## Introduction
 
-Planning and navigation in Physical AI systems presents unique challenges that distinguish it from traditional pathfinding in digital environments. While digital systems can compute optimal paths in idealized graphs, Physical AI systems must navigate in continuous, dynamic environments with real-time constraints, physical limitations, and safety requirements. This chapter explores the theoretical foundations and practical implementations of planning and navigation for embodied AI systems, covering everything from classical algorithms like A* to modern approaches like RRT* and deep reinforcement learning for navigation.
+Planning and navigation in Physical AI systems represents one of the most challenging aspects of embodied artificial intelligence. Unlike digital systems that can compute optimal paths in idealized environments, Physical AI systems must navigate through continuous, dynamic, and uncertain physical spaces. This chapter explores the theoretical foundations and practical implementations of planning and navigation for robotic systems, covering everything from classical algorithms like A* to modern approaches like RRT* and deep reinforcement learning for navigation.
 
-The planning process in Physical AI involves multiple interconnected components: perception to understand the environment, mapping to maintain spatial knowledge, global planning to find high-level routes, local planning to handle immediate obstacles, and control to execute the planned motions. Each component must work seamlessly together while accounting for the uncertainties, delays, and physical constraints inherent in real-world systems.
+The challenges of physical navigation extend far beyond simple pathfinding. Physical systems must account for:
+- **Dynamic environments**: Moving obstacles, changing layouts, and unpredictable humans
+- **Real-time constraints**: Planning must occur within computational and temporal limits
+- **Physical constraints**: Robot kinematics, dynamics, and safety requirements
+- **Uncertainty**: Sensor noise, localization errors, and model inaccuracies
+- **Safety**: Collision avoidance and safe operation around humans and property
 
-## Classical Planning Algorithms
+## Classical Pathfinding Algorithms
 
-### A* Pathfinding
+### A* Algorithm for Grid-Based Navigation
 
-A* represents one of the most fundamental pathfinding algorithms, providing optimal solutions in weighted graphs:
+The A* algorithm provides optimal pathfinding in weighted graphs with an admissible heuristic:
 
 ```python
 import heapq
 import numpy as np
 from typing import List, Tuple, Optional
+import matplotlib.pyplot as plt
 
 class AStarPlanner:
     """A* pathfinding algorithm for grid-based environments"""
 
-    def __init__(self, grid_resolution: float = 0.1):
+    def __init__(self, grid_resolution: float = 0.1, robot_radius: float = 0.3):
         self.grid_resolution = grid_resolution
+        self.robot_radius = robot_radius
+        # 8-directional movement (including diagonals)
         self.directions = [
             (-1, -1), (-1, 0), (-1, 1),
             (0, -1),           (0, 1),
             (1, -1),  (1, 0),  (1, 1)
         ]
-        self.diagonal_cost = np.sqrt(2)
+        # Corresponding costs (diagonals cost more)
+        self.costs = [
+            np.sqrt(2), 1.0, np.sqrt(2),
+            1.0,        1.0,
+            np.sqrt(2), 1.0, np.sqrt(2)
+        ]
 
     def plan_path(self, grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
         """
@@ -60,7 +72,17 @@ class AStarPlanner:
             List of waypoints or None if no path found
         """
         rows, cols = grid.shape
-        open_set = [(0, start)]
+
+        # Validate start and goal positions
+        if (not (0 <= start[0] < rows and 0 <= start[1] < cols) or
+            not (0 <= goal[0] < rows and 0 <= goal[1] < cols)):
+            return None
+
+        if grid[start] == 1 or grid[goal] == 1:
+            return None  # Start or goal in obstacle
+
+        # Initialize data structures
+        open_set = [(0, start)]  # (f_score, position)
         came_from = {}
         g_score = {start: 0}
         f_score = {start: self.heuristic(start, goal)}
@@ -78,11 +100,22 @@ class AStarPlanner:
 
             visited.add(current)
 
-            for neighbor in self.get_neighbors(current, grid):
+            # Explore neighbors
+            for i, direction in enumerate(self.directions):
+                neighbor = (current[0] + direction[0], current[1] + direction[1])
+
+                # Check bounds
+                if not (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols):
+                    continue
+
+                # Check if neighbor is traversable
+                if grid[neighbor] == 1:  # Obstacle
+                    continue
+
                 if neighbor in visited:
                     continue
 
-                tentative_g = g_score[current] + self.distance(current, neighbor)
+                tentative_g = g_score[current] + self.costs[i]
 
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
@@ -97,27 +130,6 @@ class AStarPlanner:
         """Heuristic function (Euclidean distance)"""
         return np.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
 
-    def distance(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
-        """Calculate distance between two positions"""
-        dr = pos1[0] - pos2[0]
-        dc = pos1[1] - pos2[1]
-        return np.sqrt(dr**2 + dc**2)
-
-    def get_neighbors(self, pos: Tuple[int, int], grid: np.ndarray) -> List[Tuple[int, int]]:
-        """Get valid neighbors for a position"""
-        neighbors = []
-        rows, cols = grid.shape
-
-        for dr, dc in self.directions:
-            new_row = pos[0] + dr
-            new_col = pos[1] + dc
-
-            if (0 <= new_row < rows and 0 <= new_col < cols and
-                grid[new_row, new_col] == 0):  # Free space
-                neighbors.append((new_row, new_col))
-
-        return neighbors
-
     def reconstruct_path(self, came_from: dict, current: Tuple[int, int]) -> List[Tuple[int, int]]:
         """Reconstruct path from came_from dictionary"""
         path = [current]
@@ -126,31 +138,116 @@ class AStarPlanner:
             path.append(current)
         return path[::-1]
 
+    def plan_path_with_smoothing(self, grid: np.ndarray, start: Tuple[float, float],
+                                goal: Tuple[float, float]) -> Optional[List[Tuple[float, float]]]:
+        """
+        Plan path in continuous space by converting to grid and applying smoothing
+        """
+        # Convert continuous coordinates to grid coordinates
+        start_grid = (int(start[0] / self.grid_resolution), int(start[1] / self.grid_resolution))
+        goal_grid = (int(goal[0] / self.grid_resolution), int(goal[1] / self.grid_resolution))
+
+        # Plan path on grid
+        grid_path = self.plan_path(grid, start_grid, goal_grid)
+
+        if grid_path is None:
+            return None
+
+        # Convert back to continuous coordinates and apply smoothing
+        continuous_path = [(pos[0] * self.grid_resolution, pos[1] * self.grid_resolution)
+                          for pos in grid_path]
+
+        # Apply path smoothing
+        smoothed_path = self.smooth_path(continuous_path, grid)
+
+        return smoothed_path
+
+    def smooth_path(self, path: List[Tuple[float, float]], grid: np.ndarray) -> List[Tuple[float, float]]:
+        """Apply path smoothing using gradient descent approach"""
+        if len(path) < 3:
+            return path
+
+        # Convert to numpy array for easier manipulation
+        path_array = np.array(path)
+        smoothed_path = path_array.copy()
+
+        # Iterative smoothing
+        for _ in range(10):  # Number of smoothing iterations
+            for i in range(1, len(path_array) - 1):
+                # Current point
+                current = smoothed_path[i]
+
+                # Previous and next points
+                prev = smoothed_path[i - 1]
+                next_pt = smoothed_path[i + 1]
+
+                # Desired position (average of neighbors)
+                desired = 0.5 * (prev + next_pt)
+
+                # Move current point toward desired position (with constraints)
+                new_pos = current + 0.1 * (desired - current)
+
+                # Ensure new position is valid (not in obstacle)
+                grid_x, grid_y = int(new_pos[0] / self.grid_resolution), int(new_pos[1] / self.grid_resolution)
+                rows, cols = grid.shape
+
+                if (0 <= grid_x < rows and 0 <= grid_y < cols and grid[grid_x, grid_y] == 0):
+                    smoothed_path[i] = new_pos
+
+        # Convert back to list of tuples
+        return [(float(x), float(y)) for x, y in smoothed_path]
+
 # Example usage
-grid = np.zeros((100, 100))
-# Add some obstacles
-grid[30:40, 20:80] = 1  # Horizontal wall
-grid[50:80, 45] = 1     # Vertical wall
+def visualize_pathfinding():
+    """Visualize A* pathfinding with obstacle avoidance"""
+    # Create a test grid with obstacles
+    grid = np.zeros((50, 50))
 
-planner = AStarPlanner()
-path = planner.plan_path(grid, (10, 10), (90, 90))
+    # Add some obstacles
+    grid[10:20, 10:15] = 1  # Vertical wall
+    grid[20:25, 20:35] = 1  # Horizontal wall
+    grid[30:40, 30:32] = 1  # Narrow vertical wall
+    grid[35:37, 15:30] = 1  # Short horizontal wall
 
-if path:
-    print(f"Found path with {len(path)} waypoints")
-else:
-    print("No path found")
+    # Define start and goal
+    start = (5, 5)
+    goal = (40, 40)
+
+    # Plan path
+    planner = AStarPlanner(grid_resolution=1.0)
+    path = planner.plan_path(grid, start, goal)
+
+    # Visualize
+    plt.figure(figsize=(10, 10))
+    plt.imshow(grid, cmap='binary', origin='upper')
+
+    if path:
+        path_array = np.array(path)
+        plt.plot(path_array[:, 1], path_array[:, 0], 'r-', linewidth=2, label='Path')
+        plt.plot(start[1], start[0], 'go', markersize=10, label='Start')
+        plt.plot(goal[1], goal[0], 'ro', markersize=10, label='Goal')
+
+    plt.title('A* Pathfinding with Obstacle Avoidance')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+
+    return path
+
+# Run visualization
+# path = visualize_pathfinding()
 ```
 
-### Dijkstra's Algorithm
+### Dijkstra's Algorithm for Uniform Cost Environments
 
-For cases where all edge weights are equal, Dijkstra's algorithm provides optimal solutions:
+For environments where all traversable areas have the same cost:
 
 ```python
 import heapq
 from collections import defaultdict
 
 class DijkstraPlanner:
-    """Dijkstra's algorithm for shortest path finding"""
+    """Dijkstra's algorithm for shortest path in uniform cost environments"""
 
     def __init__(self):
         pass
@@ -159,15 +256,20 @@ class DijkstraPlanner:
         """
         Plan path using Dijkstra's algorithm
         Args:
-            graph: Dictionary {node: {neighbor: weight}}
+            graph: Dictionary {node: {neighbor: cost}}
             start: Start node
             goal: Goal node
         Returns:
             List of nodes forming the path
         """
+        # Distance from start to each node
         distances = {node: float('infinity') for node in graph}
         distances[start] = 0
+
+        # Previous node in optimal path
         previous = {}
+
+        # Priority queue: (distance, node)
         pq = [(0, start)]
         visited = set()
 
@@ -191,7 +293,7 @@ class DijkstraPlanner:
                         previous[neighbor] = current
                         heapq.heappush(pq, (distance, neighbor))
 
-        return None
+        return None  # No path found
 
     def reconstruct_path(self, previous: dict, start: int, goal: int) -> List[int]:
         """Reconstruct path from previous dictionary"""
@@ -204,76 +306,99 @@ class DijkstraPlanner:
 
         path.reverse()
         return path if path[0] == start else []
+
+    def create_grid_graph(self, grid: np.ndarray) -> dict:
+        """Convert grid to graph representation for Dijkstra"""
+        rows, cols = grid.shape
+        graph = defaultdict(dict)
+
+        for i in range(rows):
+            for j in range(cols):
+                if grid[i, j] == 0:  # Free space
+                    # Connect to 8-connected neighbors
+                    for di in [-1, 0, 1]:
+                        for dj in [-1, 0, 1]:
+                            if di == 0 and dj == 0:
+                                continue  # Skip self
+
+                            ni, nj = i + di, j + dj
+                            if 0 <= ni < rows and 0 <= nj < cols and grid[ni, nj] == 0:
+                                # Calculate cost (diagonal movement costs more)
+                                cost = np.sqrt(2) if di != 0 and dj != 0 else 1.0
+                                node_id = i * cols + j
+                                neighbor_id = ni * cols + nj
+                                graph[node_id][neighbor_id] = cost
+
+        return dict(graph)
 ```
 
-### Jump Point Search (JPS)
+### Jump Point Search (JPS) for Grid Optimization
 
-For grid-based environments, Jump Point Search optimizes A* by pruning symmetrical paths:
+JPS optimizes A* by pruning symmetrical paths in uniform-cost grids:
 
 ```python
 class JumpPointSearch:
-    """Jump Point Search algorithm - optimized A* for uniform-cost grids"""
+    """Jump Point Search - optimized pathfinding for uniform-cost grids"""
 
     def __init__(self):
-        self.directions = [
-            (-1, -1), (-1, 0), (-1, 1),
-            (0, -1),           (0, 1),
-            (1, -1),  (1, 0),  (1, 1)
-        ]
-        self.cardinal_dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        self.diagonal_dirs = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        # Cardinal directions (N, E, S, W)
+        self.cardinals = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+        # Diagonal directions (NE, SE, SW, NW)
+        self.diagonals = [(-1, 1), (1, 1), (1, -1), (-1, -1)]
 
     def plan_path(self, grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
         """Plan path using Jump Point Search"""
-        open_set = [(0, start)]
-        g_score = {start: 0}
-        f_score = {start: self.heuristic(start, goal)}
+        rows, cols = grid.shape
+        open_set = [(self.heuristic(start, goal), 0, start)]  # (f_score, g_score, position)
         closed_set = set()
+        g_score = {start: 0}
 
         while open_set:
-            current_f, current = heapq.heappop(open_set)
+            _, current_g, current = heapq.heappop(open_set)
 
             if current == goal:
-                # Reconstruct path (simplified)
-                return [start, goal]  # Placeholder for full implementation
+                # Reconstruct path (would need came_from tracking)
+                return [current]  # Simplified - full implementation would track path
 
             if current in closed_set:
                 continue
 
             closed_set.add(current)
 
-            # Identify successors using forced neighbors
-            successors = self.identify_successors(grid, current, goal, closed_set)
+            # Explore neighbors (natural and forced)
+            neighbors = self.get_successors(grid, current, goal, closed_set)
 
-            for successor, g_cost in successors:
-                if successor in closed_set:
+            for neighbor, move_cost in neighbors:
+                if neighbor in closed_set:
                     continue
 
-                if successor not in g_score or g_cost < g_score[successor]:
-                    g_score[successor] = g_cost
-                    f_score[successor] = g_cost + self.heuristic(successor, goal)
-                    heapq.heappush(open_set, (f_score[successor], successor))
+                tentative_g = current_g + move_cost
+
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    g_score[neighbor] = tentative_g
+                    f_score = tentative_g + self.heuristic(neighbor, goal)
+                    heapq.heappush(open_set, (f_score, tentative_g, neighbor))
 
         return None
 
-    def identify_successors(self, grid: np.ndarray, current: Tuple[int, int],
-                           goal: Tuple[int, int], closed_set: set) -> List[Tuple[Tuple[int, int], float]]:
-        """Identify successors using jump points"""
+    def get_successors(self, grid: np.ndarray, current: Tuple[int, int], goal: Tuple[int, int],
+                      closed_set: set) -> List[Tuple[Tuple[int, int], float]]:
+        """Get valid successors using JPS pruning"""
         successors = []
         rows, cols = grid.shape
 
         # Check each natural neighbor
-        for direction in self.directions:
+        for direction in self.cardinals + self.diagonals:
             jump_point = self.jump(grid, current, direction, goal)
             if jump_point and jump_point not in closed_set:
-                g_cost = g_score[current] + self.distance(current, jump_point)
-                successors.append((jump_point, g_cost))
+                cost = self.distance(current, jump_point)
+                successors.append((jump_point, cost))
 
         return successors
 
     def jump(self, grid: np.ndarray, current: Tuple[int, int], direction: Tuple[int, int],
              goal: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-        """Jump in direction, stopping at forced neighbors or goal"""
+        """Jump in direction, stopping at obstacles, goal, or forced neighbors"""
         row, col = current
         d_row, d_col = direction
         rows, cols = grid.shape
@@ -287,244 +412,109 @@ class JumpPointSearch:
         if (next_row, next_col) == goal:
             return (next_row, next_col)
 
-        # Diagonal move - check cardinal neighbors
+        # Diagonal move - check for forced neighbors
         if d_row != 0 and d_col != 0:
-            # Check if we have a forced neighbor
+            # Check if there are forced neighbors
             if (self.is_forced(grid, next_row - d_row, next_col, (0, d_col)) or
                 self.is_forced(grid, next_row, next_col - d_col, (d_row, 0))):
                 return (next_row, next_col)
+
+            # Continue jumping diagonally
+            return self.jump(grid, (next_row, next_col), direction, goal)
         else:
             # Cardinal move
             if self.is_forced(grid, next_row, next_col, direction):
                 return (next_row, next_col)
 
-        # Continue jumping
-        return self.jump(grid, (next_row, next_col), direction, goal)
+            # Continue jumping in cardinal direction
+            return self.jump(grid, (next_row, next_col), direction, goal)
 
     def is_forced(self, grid: np.ndarray, row: int, col: int, direction: Tuple[int, int]) -> bool:
         """Check if position has forced neighbors"""
         d_row, d_col = direction
         rows, cols = grid.shape
 
-        # Check perpendicular directions
-        if d_row == 0:  # Horizontal move
-            return ((0 <= row - 1 < rows and 0 <= col + d_col < cols and
-                     grid[row - 1, col] == 1 and grid[row - 1, col + d_col] == 0) or
-                    (0 <= row + 1 < rows and 0 <= col + d_col < cols and
-                     grid[row + 1, col] == 1 and grid[row + 1, col + d_col] == 0))
-        elif d_col == 0:  # Vertical move
-            return ((0 <= row + d_row < rows and 0 <= col - 1 < cols and
-                     grid[row, col - 1] == 1 and grid[row + d_row, col - 1] == 0) or
+        # For diagonal moves, check adjacent cardinal directions
+        if d_row != 0 and d_col != 0:
+            # Check if perpendicular moves lead to obstacles
+            return (
+                (0 <= row - d_row < rows and 0 <= col < cols and
+                 grid[row - d_row, col] == 1) or  # North/South blocked
+                (0 <= row < rows and 0 <= col - d_col < cols and
+                 grid[row, col - d_col] == 1)    # East/West blocked
+            )
+        else:
+            # For cardinal moves, check diagonal neighbors
+            if d_row != 0:  # Moving vertically
+                return (
+                    (0 <= row + d_row < rows and 0 <= col - 1 < cols and
+                     grid[row + d_row, col - 1] == 1) or
                     (0 <= row + d_row < rows and 0 <= col + 1 < cols and
-                     grid[row, col + 1] == 1 and grid[row + d_row, col + 1] == 0))
-        else:  # Diagonal move
-            return ((0 <= row - d_row < rows and 0 <= col < cols and
-                     grid[row - d_row, col] == 1) or
-                    (0 <= row < rows and 0 <= col - d_col < cols and
-                     grid[row, col - d_col] == 1))
+                     grid[row + d_row, col + 1] == 1)
+                )
+            else:  # Moving horizontally
+                return (
+                    (0 <= row - 1 < rows and 0 <= col + d_col < cols and
+                     grid[row - 1, col + d_col] == 1) or
+                    (0 <= row + 1 < rows and 0 <= col + d_col < cols and
+                     grid[row + 1, col + d_col] == 1)
+                )
 
     def heuristic(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
         """Heuristic function (Manhattan distance for grid)"""
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
     def distance(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
-        """Calculate distance between two positions"""
-        dr = pos1[0] - pos2[0]
-        dc = pos1[1] - pos2[1]
-        return np.sqrt(dr**2 + dc**2)
+        """Calculate distance between positions"""
+        return np.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
 ```
 
 ## Sampling-Based Motion Planning
 
-### Probabilistic Roadmap (PRM)
-
-PRM pre-computes a roadmap for multiple queries:
-
-```python
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-import random
-
-class PRMPlanner:
-    """Probabilistic Roadmap planner for motion planning"""
-
-    def __init__(self, robot_radius: float = 0.5, max_neighbors: int = 10):
-        self.robot_radius = robot_radius
-        self.max_neighbors = max_neighbors
-        self.roadmap = []
-        self.graph = {}  # Adjacency list representation
-
-    def build_roadmap(self, environment, num_samples: int = 1000, k: int = 10):
-        """Build roadmap by sampling valid configurations"""
-        self.roadmap = []
-        self.graph = {}
-
-        # Sample random configurations
-        for _ in range(num_samples):
-            config = self.sample_configuration(environment)
-
-            if self.is_valid_configuration(config, environment):
-                self.roadmap.append(config)
-
-                # Find k nearest neighbors
-                neighbors = self.find_k_nearest_neighbors(config, k)
-
-                # Attempt to connect to neighbors
-                for neighbor in neighbors:
-                    if self.is_valid_connection(config, neighbor, environment):
-                        self.add_edge(config, neighbor)
-
-    def sample_configuration(self, environment):
-        """Sample a random configuration in the environment"""
-        # This would be environment-specific
-        # For a 2D environment, sample x, y coordinates
-        bounds = environment.get_bounds()
-        x = random.uniform(bounds[0][0], bounds[0][1])
-        y = random.uniform(bounds[1][0], bounds[1][1])
-        return np.array([x, y])
-
-    def is_valid_configuration(self, config, environment) -> bool:
-        """Check if configuration is collision-free"""
-        # Check collision with obstacles
-        return environment.check_collision(config, self.robot_radius)
-
-    def find_k_nearest_neighbors(self, config, k):
-        """Find k nearest neighbors in roadmap"""
-        if len(self.roadmap) < k:
-            return self.roadmap
-
-        # Use scikit-learn for efficient nearest neighbor search
-        roadmap_array = np.array(self.roadmap)
-        nbrs = NearestNeighbors(n_neighbors=min(k+1, len(self.roadmap)), algorithm='ball_tree')
-        nbrs.fit(roadmap_array)
-
-        distances, indices = nbrs.kneighbors([config])
-        neighbors = [tuple(self.roadmap[i]) for i in indices[0][1:]]  # Exclude self
-
-        return neighbors
-
-    def is_valid_connection(self, config1, config2, environment) -> bool:
-        """Check if connection between configs is collision-free"""
-        # Use straight-line path with collision checking
-        steps = int(np.linalg.norm(config2 - config1) / self.robot_radius * 0.5)
-        for i in range(1, steps + 1):
-            t = i / steps
-            intermediate = (1 - t) * config1 + t * config2
-            if not self.is_valid_configuration(intermediate, environment):
-                return False
-        return True
-
-    def add_edge(self, config1, config2):
-        """Add bidirectional edge to graph"""
-        config1_tuple = tuple(config1)
-        config2_tuple = tuple(config2)
-
-        if config1_tuple not in self.graph:
-            self.graph[config1_tuple] = []
-        if config2_tuple not in self.graph:
-            self.graph[config2_tuple] = []
-
-        if config2_tuple not in self.graph[config1_tuple]:
-            self.graph[config1_tuple].append(config2_tuple)
-        if config1_tuple not in self.graph[config2_tuple]:
-            self.graph[config2_tuple].append(config1_tuple)
-
-    def plan_path(self, start, goal, environment):
-        """Plan path using the precomputed roadmap"""
-        # Find nearest roadmap nodes to start and goal
-        start_node = self.find_nearest_roadmap_node(start)
-        goal_node = self.find_nearest_roadmap_node(goal)
-
-        # Use Dijkstra or A* to find path in roadmap
-        path = self.shortest_path_in_graph(start_node, goal_node)
-
-        if path:
-            # Add start and goal to path
-            path = [start] + path + [goal]
-
-        return path
-
-    def find_nearest_roadmap_node(self, query_config):
-        """Find nearest roadmap node to query configuration"""
-        if not self.roadmap:
-            return None
-
-        roadmap_array = np.array(self.roadmap)
-        distances = np.linalg.norm(roadmap_array - query_config, axis=1)
-        nearest_idx = np.argmin(distances)
-        return tuple(self.roadmap[nearest_idx])
-
-    def shortest_path_in_graph(self, start, goal):
-        """Find shortest path in roadmap graph using Dijkstra"""
-        if start not in self.graph or goal not in self.graph:
-            return None
-
-        distances = {node: float('infinity') for node in self.graph}
-        distances[start] = 0
-        previous = {node: None for node in self.graph}
-        unvisited = set(self.graph.keys())
-
-        while unvisited:
-            current = min(unvisited, key=lambda x: distances[x])
-            unvisited.remove(current)
-
-            if current == goal:
-                break
-
-            for neighbor in self.graph[current]:
-                if neighbor in unvisited:
-                    distance = distances[current] + self.euclidean_distance(current, neighbor)
-                    if distance < distances[neighbor]:
-                        distances[neighbor] = distance
-                        previous[neighbor] = current
-
-        # Reconstruct path
-        path = []
-        current = goal
-        while current is not None:
-            path.append(np.array(current))
-            current = previous[current]
-            if current == start:
-                break
-
-        path.reverse()
-        return path[1:] if path else None
-
-    def euclidean_distance(self, config1, config2):
-        """Calculate Euclidean distance between configurations"""
-        return np.linalg.norm(np.array(config1) - np.array(config2))
-```
-
 ### Rapidly-exploring Random Trees (RRT)
 
-RRT is excellent for high-dimensional configuration spaces:
+RRT is excellent for high-dimensional configuration spaces with obstacles:
 
 ```python
 import numpy as np
 import random
+from typing import List, Tuple, Optional
 
 class RRTNode:
     """Node in RRT tree"""
-    def __init__(self, config, parent=None):
+    def __init__(self, config: np.ndarray, parent=None):
         self.config = np.array(config)
         self.parent = parent
         self.children = []
 
-    def add_child(self, child_node):
-        self.children.append(child_node)
-
 class RRTPlanner:
-    """Rapidly-exploring Random Tree planner"""
+    """Rapidly-exploring Random Tree planner for high-dimensional spaces"""
 
-    def __init__(self, robot_radius: float = 0.5, step_size: float = 0.5):
+    def __init__(self, workspace_bounds: List[Tuple[float, float]],
+                 robot_radius: float = 0.3, step_size: float = 0.5):
+        self.bounds = workspace_bounds  # [(min_x, max_x), (min_y, max_y), ...]
         self.robot_radius = robot_radius
         self.step_size = step_size
         self.root = None
-        self.nodes = []  # List of all nodes for quick access
+        self.nodes = []
+        self.dimension = len(workspace_bounds)
 
-    def plan_path(self, environment, start, goal, max_iterations: int = 10000,
-                  goal_bias: float = 0.1, tolerance: float = 1.0):
-        """Plan path using RRT algorithm"""
+    def plan_path(self, start: np.ndarray, goal: np.ndarray,
+                  obstacles: List, max_iterations: int = 10000,
+                  goal_bias: float = 0.1, tolerance: float = 0.5) -> Optional[List[np.ndarray]]:
+        """
+        Plan path using RRT algorithm
+        Args:
+            start: Start configuration
+            goal: Goal configuration
+            obstacles: List of obstacle objects with collision checking
+            max_iterations: Maximum number of iterations
+            goal_bias: Probability of sampling goal instead of random
+            tolerance: Distance tolerance for reaching goal
+        Returns:
+            List of configurations forming the path
+        """
+        # Initialize tree
         self.root = RRTNode(start)
         self.nodes = [self.root]
 
@@ -533,7 +523,7 @@ class RRTPlanner:
             if random.random() < goal_bias:
                 rand_config = goal
             else:
-                rand_config = self.sample_random_config(environment)
+                rand_config = self.sample_random_config()
 
             # Find nearest node in tree
             nearest_node = self.find_nearest_node(rand_config)
@@ -541,28 +531,29 @@ class RRTPlanner:
             # Extend tree towards random configuration
             new_config = self.extend_towards(nearest_node.config, rand_config)
 
-            # Check if extension is valid
-            if self.is_valid_connection(nearest_node.config, new_config, environment):
-                new_node = RRTNode(new_config, nearest_node)
-                nearest_node.add_child(new_node)
-                self.nodes.append(new_node)
+            # Check if extension is valid (collision-free)
+            if self.is_valid_configuration(new_config, obstacles):
+                # Check if path from nearest to new is collision-free
+                if self.is_valid_path(nearest_node.config, new_config, obstacles):
+                    new_node = RRTNode(new_config, nearest_node)
+                    nearest_node.children.append(new_node)
+                    self.nodes.append(new_node)
 
-                # Check if we're close to goal
-                if np.linalg.norm(new_config - goal) < tolerance:
-                    return self.extract_path(new_node)
+                    # Check if we've reached the goal
+                    if np.linalg.norm(new_config - goal) < tolerance:
+                        return self.extract_path(new_node)
 
         return None  # Failed to find path
 
-    def sample_random_config(self, environment):
-        """Sample random configuration in environment"""
-        bounds = environment.get_bounds()
+    def sample_random_config(self) -> np.ndarray:
+        """Sample random configuration within workspace bounds"""
         config = []
-        for dim_bounds in bounds:
-            val = random.uniform(dim_bounds[0], dim_bounds[1])
+        for bound in self.bounds:
+            val = random.uniform(bound[0], bound[1])
             config.append(val)
         return np.array(config)
 
-    def find_nearest_node(self, config):
+    def find_nearest_node(self, config: np.ndarray) -> RRTNode:
         """Find nearest node in tree to given configuration"""
         min_dist = float('inf')
         nearest = None
@@ -575,7 +566,7 @@ class RRTPlanner:
 
         return nearest
 
-    def extend_towards(self, start_config, target_config):
+    def extend_towards(self, start_config: np.ndarray, target_config: np.ndarray) -> np.ndarray:
         """Extend from start towards target by step size"""
         direction = target_config - start_config
         distance = np.linalg.norm(direction)
@@ -589,18 +580,50 @@ class RRTPlanner:
 
         return new_config
 
-    def is_valid_connection(self, config1, config2, environment):
-        """Check if connection between configs is collision-free"""
-        # Sample intermediate points along the path
-        steps = int(np.linalg.norm(config2 - config1) / self.robot_radius * 0.5)
-        for i in range(1, steps + 1):
-            t = i / steps
-            intermediate = (1 - t) * config1 + t * config2
-            if not environment.check_collision(intermediate, self.robot_radius):
+    def is_valid_configuration(self, config: np.ndarray, obstacles: List) -> bool:
+        """Check if configuration is collision-free"""
+        for obstacle in obstacles:
+            if self.check_collision(config, obstacle):
                 return False
         return True
 
-    def extract_path(self, goal_node):
+    def is_valid_path(self, start_config: np.ndarray, end_config: np.ndarray,
+                     obstacles: List) -> bool:
+        """Check if path between configurations is collision-free"""
+        # Sample intermediate points along the path
+        steps = int(np.linalg.norm(end_config - start_config) / self.robot_radius * 0.5)
+
+        for i in range(1, steps + 1):
+            t = i / steps
+            intermediate = (1 - t) * start_config + t * end_config
+
+            if not self.is_valid_configuration(intermediate, obstacles):
+                return False
+
+        return True
+
+    def check_collision(self, config: np.ndarray, obstacle) -> bool:
+        """Check if configuration collides with obstacle"""
+        # This would depend on obstacle type
+        # For now, assuming obstacle has a 'contains' method
+        if hasattr(obstacle, 'contains'):
+            return obstacle.contains(config, self.robot_radius)
+        else:
+            # Generic distance-based collision check
+            return self.distance_to_obstacle(config, obstacle) < self.robot_radius
+
+    def distance_to_obstacle(self, config: np.ndarray, obstacle) -> float:
+        """Calculate distance from configuration to obstacle"""
+        # This is a simplified implementation
+        # In practice, this would depend on obstacle shape
+        if hasattr(obstacle, 'center') and hasattr(obstacle, 'radius'):
+            # Circular/spherical obstacle
+            return np.linalg.norm(config - obstacle.center) - obstacle.radius
+        else:
+            # For other shapes, implement appropriate distance calculation
+            return 1.0  # Default distance
+
+    def extract_path(self, goal_node: RRTNode) -> List[np.ndarray]:
         """Extract path from goal node back to root"""
         path = []
         current = goal_node
@@ -615,57 +638,65 @@ class RRTPlanner:
 class RRTStarPlanner(RRTPlanner):
     """RRT* - asymptotically optimal RRT variant"""
 
-    def __init__(self, robot_radius: float = 0.5, step_size: float = 0.5,
+    def __init__(self, workspace_bounds: List[Tuple[float, float]],
+                 robot_radius: float = 0.3, step_size: float = 0.5,
                  max_rewire_radius: float = 2.0):
-        super().__init__(robot_radius, step_size)
+        super().__init__(workspace_bounds, robot_radius, step_size)
         self.max_rewire_radius = max_rewire_radius
 
-    def plan_path(self, environment, start, goal, max_iterations: int = 10000,
-                  goal_bias: float = 0.1, tolerance: float = 1.0):
-        """Plan path using RRT* algorithm with rewiring"""
+    def plan_path(self, start: np.ndarray, goal: np.ndarray,
+                  obstacles: List, max_iterations: int = 10000,
+                  goal_bias: float = 0.1, tolerance: float = 0.5) -> Optional[List[np.ndarray]]:
+        """
+        Plan path using RRT* algorithm with rewiring
+        """
+        # Initialize tree with start node
         self.root = RRTNode(start)
-        self.root.cost = 0.0  # Add cost tracking
+        self.root.cost = 0.0
         self.nodes = [self.root]
 
-        best_path = None
-        best_cost = float('inf')
+        best_solution_cost = float('inf')
+        best_solution = None
 
         for iteration in range(max_iterations):
-            # Sample random configuration
+            # Sample random configuration (with goal bias)
             if random.random() < goal_bias:
                 rand_config = goal
             else:
-                rand_config = self.sample_random_config(environment)
+                rand_config = self.sample_random_config()
 
             # Find nearest node
             nearest_node = self.find_nearest_node(rand_config)
 
-            # Extend tree
+            # Extend tree towards random configuration
             new_config = self.extend_towards(nearest_node.config, rand_config)
 
-            if self.is_valid_connection(nearest_node.config, new_config, environment):
-                # Find best parent for new node
-                best_parent, min_cost = self.find_best_parent(new_config, environment)
+            # Check if extension is valid
+            if self.is_valid_configuration(new_config, obstacles) and \
+               self.is_valid_path(nearest_node.config, new_config, obstacles):
+
+                # Find best parent for new node within radius
+                best_parent, min_cost = self.find_best_parent(new_config, obstacles)
 
                 if best_parent:
                     new_node = RRTNode(new_config, best_parent)
                     new_node.cost = min_cost
-                    best_parent.add_child(new_node)
+                    best_parent.children.append(new_node)
                     self.nodes.append(new_node)
 
-                    # Rewire tree to improve path costs
-                    self.rewire_node(new_node, environment)
+                    # Rewire the tree to improve path costs
+                    self.rewire_node(new_node, obstacles)
 
-                    # Check for path to goal
+                    # Check if we've reached the goal
                     if np.linalg.norm(new_config - goal) < tolerance:
                         current_cost = min_cost + np.linalg.norm(new_config - goal)
-                        if current_cost < best_cost:
-                            best_cost = current_cost
-                            best_path = self.extract_path(new_node)
+                        if current_cost < best_solution_cost:
+                            best_solution_cost = current_cost
+                            best_solution = self.extract_path(new_node)
 
-        return best_path
+        return best_solution
 
-    def find_best_parent(self, new_config, environment):
+    def find_best_parent(self, new_config: np.ndarray, obstacles: List) -> Tuple[Optional[RRTNode], float]:
         """Find parent that gives minimum cost to reach new_config"""
         # Find all nodes within rewiring radius
         neighbors = self.find_nodes_in_radius(new_config, self.max_rewire_radius)
@@ -674,7 +705,7 @@ class RRTStarPlanner(RRTPlanner):
         min_cost = float('inf')
 
         for neighbor in neighbors:
-            if self.is_valid_connection(neighbor.config, new_config, environment):
+            if self.is_valid_path(neighbor.config, new_config, obstacles):
                 cost = neighbor.cost + np.linalg.norm(neighbor.config - new_config)
                 if cost < min_cost:
                     min_cost = cost
@@ -682,7 +713,7 @@ class RRTStarPlanner(RRTPlanner):
 
         return best_parent, min_cost
 
-    def find_nodes_in_radius(self, config, radius):
+    def find_nodes_in_radius(self, config: np.ndarray, radius: float) -> List[RRTNode]:
         """Find all nodes within given radius"""
         neighbors = []
         for node in self.nodes:
@@ -690,7 +721,7 @@ class RRTStarPlanner(RRTPlanner):
                 neighbors.append(node)
         return neighbors
 
-    def rewire_node(self, new_node, environment):
+    def rewire_node(self, new_node: RRTNode, obstacles: List):
         """Rewire tree to improve path costs"""
         neighbors = self.find_nodes_in_radius(new_node.config, self.max_rewire_radius)
 
@@ -698,29 +729,30 @@ class RRTStarPlanner(RRTPlanner):
             if neighbor != new_node.parent:  # Don't rewire to current parent
                 potential_cost = new_node.cost + np.linalg.norm(new_node.config - neighbor.config)
 
-                if potential_cost < neighbor.cost:
-                    if self.is_valid_connection(new_node.config, neighbor.config, environment):
-                        # Change parent of neighbor
-                        old_parent = neighbor.parent
-                        neighbor.parent = new_node
-                        neighbor.cost = potential_cost
+                if potential_cost < neighbor.cost and \
+                   self.is_valid_path(new_node.config, neighbor.config, obstacles):
+                    # Change parent of neighbor
+                    old_parent = neighbor.parent
+                    if old_parent:
+                        old_parent.children.remove(neighbor)
 
-                        # Update parent-child relationships
-                        if old_parent:
-                            old_parent.children.remove(neighbor)
-                        new_node.add_child(neighbor)
+                    neighbor.parent = new_node
+                    neighbor.cost = potential_cost
+
+                    # Add to new parent's children
+                    new_node.children.append(neighbor)
 ```
 
 ## Local Path Planning and Obstacle Avoidance
 
 ### Dynamic Window Approach (DWA)
 
-DWA provides real-time obstacle avoidance for mobile robots:
+DWA is a popular local planner for real-time obstacle avoidance:
 
 ```python
 import numpy as np
 from dataclasses import dataclass
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 @dataclass
 class RobotState:
@@ -732,10 +764,10 @@ class RobotState:
     omega: float  # Angular velocity
 
 @dataclass
-class DynamicWindowParams:
+class DWAParams:
     """Parameters for Dynamic Window Approach"""
     max_speed: float = 1.0           # Maximum linear speed
-    min_speed: float = 0.1           # Minimum linear speed
+    min_speed: float = 0.1           # Minimum linear speed (can be 0 for holonomic)
     max_yawrate: float = 40.0        # Maximum angular speed [deg/s]
     max_accel: float = 0.5           # Maximum linear acceleration
     max_dyawrate: float = 80.0       # Maximum angular acceleration
@@ -749,7 +781,7 @@ class DynamicWindowParams:
 class DynamicWindowApproach:
     """Dynamic Window Approach for local path planning"""
 
-    def __init__(self, params: DynamicWindowParams):
+    def __init__(self, params: DWAParams):
         self.params = params
 
     def plan_local_path(self, robot_state: RobotState, goal: Tuple[float, float],
@@ -784,7 +816,7 @@ class DynamicWindowApproach:
                              self.params.obstacle_cost_gain * ob_cost)
 
                 # Find best trajectory
-                if min_cost >= final_cost:
+                if final_cost < min_cost:
                     min_cost = final_cost
                     best_traj = [v, omega, traj]
 
@@ -798,12 +830,12 @@ class DynamicWindowApproach:
         """Calculate dynamic window based on robot constraints"""
         # Dynamic window = [v_min, v_max, omega_min, omega_max]
         vs = [self.params.min_speed, self.params.max_speed,
-              -self.params.max_yawrate, self.params.max_yawrate]
+              -np.deg2rad(self.params.max_yawrate), np.deg2rad(self.params.max_yawrate)]
 
         vd = [robot_state.v - self.params.max_accel * self.params.dt,
               robot_state.v + self.params.max_accel * self.params.dt,
-              robot_state.omega - self.params.max_dyawrate * self.params.dt,
-              robot_state.omega + self.params.max_dyawrate * self.params.dt]
+              robot_state.omega - np.deg2rad(self.params.max_dyawrate) * self.params.dt,
+              robot_state.omega + np.deg2rad(self.params.max_dyawrate) * self.params.dt]
 
         # Calculate window by intersection of vs and vd
         dw = [max(vs[0], vd[0]), min(vs[1], vd[1]),
@@ -867,11 +899,48 @@ class DynamicWindowApproach:
 
         # Cost is inversely proportional to distance
         return 1.0 / min_dist if min_dist != float('inf') else float('inf')
+
+# Example usage
+def demonstrate_dwa():
+    """Demonstrate Dynamic Window Approach"""
+    params = DWAParams(
+        max_speed=1.0,
+        min_speed=0.0,
+        max_yawrate=40.0,
+        max_accel=0.5,
+        max_dyawrate=80.0,
+        dt=0.1,
+        predict_time=3.0,
+        robot_radius=0.5
+    )
+
+    dwa = DynamicWindowApproach(params)
+
+    # Robot state
+    robot_state = RobotState(
+        x=0.0, y=0.0, theta=0.0, v=0.0, omega=0.0
+    )
+
+    # Goal
+    goal = (10.0, 10.0)
+
+    # Obstacles
+    obstacles = [(5, 5), (7, 6), (8, 4)]
+
+    # Plan local path
+    v_cmd, omega_cmd = dwa.plan_local_path(robot_state, goal, obstacles)
+
+    print(f"Recommended velocity: v={v_cmd:.3f}, omega={omega_cmd:.3f}")
+
+    return v_cmd, omega_cmd
+
+# Run demonstration
+# v_cmd, omega_cmd = demonstrate_dwa()
 ```
 
 ### Vector Field Histogram (VFH)
 
-VFH is effective for local obstacle avoidance:
+VFH is effective for local obstacle avoidance using histogram-based methods:
 
 ```python
 import numpy as np
@@ -1015,244 +1084,184 @@ class VFHPlanner:
 
 ## Global Path Planning with Maps
 
-### Grid-Based Path Planning
+### Probabilistic Roadmaps (PRM)
+
+PRM is effective for multi-query path planning in complex environments:
 
 ```python
-import numpy as np
-from typing import Tuple, List, Optional
+from sklearn.neighbors import NearestNeighbors
+import random
 
-class GridBasedPlanner:
-    """Grid-based path planning with various algorithms"""
+class PRMPlanner:
+    """Probabilistic Roadmap planner for multi-query path planning"""
 
-    def __init__(self, resolution: float = 0.1):
-        self.resolution = resolution
+    def __init__(self, workspace_bounds: List[Tuple[float, float]],
+                 robot_radius: float = 0.3, num_samples: int = 1000, k_neighbors: int = 10):
+        self.bounds = workspace_bounds
+        self.robot_radius = robot_radius
+        self.num_samples = num_samples
+        self.k_neighbors = k_neighbors
+        self.roadmap = []  # List of valid configurations
+        self.graph = {}    # Adjacency list for connections
+        self.nbrs = None   # Nearest neighbors model
 
-    def plan_path(self, occupancy_grid: np.ndarray, start: Tuple[int, int],
-                 goal: Tuple[int, int], algorithm: str = 'astar') -> Optional[List[Tuple[int, int]]]:
-        """Plan path using specified algorithm"""
-        if algorithm.lower() == 'astar':
-            return self.astar_path(occupancy_grid, start, goal)
-        elif algorithm.lower() == 'dijkstra':
-            return self.dijkstra_path(occupancy_grid, start, goal)
-        elif algorithm.lower() == 'rrt':
-            return self.rrt_path(occupancy_grid, start, goal)
-        else:
-            raise ValueError(f"Unknown algorithm: {algorithm}")
+    def build_roadmap(self, obstacles: List) -> bool:
+        """Build roadmap by sampling valid configurations"""
+        # Sample random configurations
+        valid_configs = []
 
-    def astar_path(self, grid: np.ndarray, start: Tuple[int, int],
-                  goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
-        """A* path planning on grid"""
-        rows, cols = grid.shape
-        open_set = [(0, start)]
-        came_from = {}
-        g_score = {start: 0}
-        f_score = {start: self.manhattan_heuristic(start, goal)}
+        for _ in range(self.num_samples):
+            config = self.sample_free_configuration(obstacles)
+            if config is not None:
+                valid_configs.append(config)
 
-        closed_set = set()
+        if len(valid_configs) < 2:
+            return False  # Not enough valid configurations
 
-        # 8-directional movement
-        directions = [
-            (-1, -1), (-1, 0), (-1, 1),
-            (0, -1),           (0, 1),
-            (1, -1),  (1, 0),  (1, 1)
-        ]
-        costs = [np.sqrt(2), 1, np.sqrt(2), 1, 1, np.sqrt(2), 1, np.sqrt(2)]
+        # Build k-nearest neighbor graph
+        self.roadmap = valid_configs
+        roadmap_array = np.array(self.roadmap)
 
-        while open_set:
-            current_f, current = heapq.heappop(open_set)
+        self.nbrs = NearestNeighbors(n_neighbors=min(self.k_neighbors + 1, len(self.roadmap)),
+                                    algorithm='ball_tree').fit(roadmap_array)
 
-            if current == goal:
-                return self.reconstruct_path(came_from, current)
+        # Connect nodes with collision-free paths
+        distances, indices = self.nbrs.kneighbors(roadmap_array)
 
-            if current in closed_set:
-                continue
+        self.graph = {i: [] for i in range(len(self.roadmap))}
 
-            closed_set.add(current)
+        for i, (dist_row, idx_row) in enumerate(zip(distances, indices)):
+            for j, (dist, idx) in enumerate(zip(dist_row, idx_row)):
+                if i != idx:  # Don't connect to self
+                    # Check if path between configurations is collision-free
+                    if self.is_path_free(self.roadmap[i], self.roadmap[idx], obstacles):
+                        self.graph[i].append(idx)
+                        self.graph[idx].append(i)  # Undirected graph
 
-            for i, (dr, dc) in enumerate(directions):
-                neighbor = (current[0] + dr, current[1] + dc)
+        return True
 
-                if (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols and
-                    grid[neighbor[0], neighbor[1]] == 0 and  # Free space
-                    neighbor not in closed_set):
+    def sample_free_configuration(self, obstacles: List) -> Optional[np.ndarray]:
+        """Sample a configuration that doesn't collide with obstacles"""
+        for _ in range(100):  # Max attempts
+            config = []
+            for bound in self.bounds:
+                val = random.uniform(bound[0], bound[1])
+                config.append(val)
+            config = np.array(config)
 
-                    tentative_g = g_score[current] + costs[i]
+            if self.is_configuration_free(config, obstacles):
+                return config
 
-                    if neighbor not in g_score or tentative_g < g_score[neighbor]:
-                        came_from[neighbor] = current
-                        g_score[neighbor] = tentative_g
-                        f_score[neighbor] = tentative_g + self.manhattan_heuristic(neighbor, goal)
-                        heapq.heappush(open_set, (f_score[neighbor], neighbor))
+        return None
 
-        return None  # No path found
+    def is_configuration_free(self, config: np.ndarray, obstacles: List) -> bool:
+        """Check if configuration is collision-free"""
+        for obstacle in obstacles:
+            if self.check_collision(config, obstacle):
+                return False
+        return True
 
-    def dijkstra_path(self, grid: np.ndarray, start: Tuple[int, int],
-                     goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
-        """Dijkstra path planning on grid"""
-        rows, cols = grid.shape
-        distances = {start: 0}
-        previous = {}
-        pq = [(0, start)]
-        visited = set()
+    def is_path_free(self, config1: np.ndarray, config2: np.ndarray,
+                    obstacles: List) -> bool:
+        """Check if path between configurations is collision-free"""
+        # Sample intermediate points along the path
+        steps = int(np.linalg.norm(config2 - config1) / self.robot_radius * 0.5)
 
-        # 8-directional movement
-        directions = [
-            (-1, -1), (-1, 0), (-1, 1),
-            (0, -1),           (0, 1),
-            (1, -1),  (1, 0),  (1, 1)
-        ]
-        costs = [np.sqrt(2), 1, np.sqrt(2), 1, 1, np.sqrt(2), 1, np.sqrt(2)]
+        for i in range(1, steps + 1):
+            t = i / steps
+            intermediate = (1 - t) * config1 + t * config2
 
-        while pq:
-            current_dist, current = heapq.heappop(pq)
-
-            if current in visited:
-                continue
-
-            visited.add(current)
-
-            if current == goal:
-                return self.reconstruct_path(previous, current)
-
-            for i, (dr, dc) in enumerate(directions):
-                neighbor = (current[0] + dr, current[1] + dc)
-
-                if (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols and
-                    grid[neighbor[0], neighbor[1]] == 0 and  # Free space
-                    neighbor not in visited):
-
-                    distance = current_dist + costs[i]
-
-                    if neighbor not in distances or distance < distances[neighbor]:
-                        distances[neighbor] = distance
-                        previous[neighbor] = current
-                        heapq.heappush(pq, (distance, neighbor))
-
-        return None  # No path found
-
-    def manhattan_heuristic(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
-        """Manhattan distance heuristic"""
-        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
-
-    def reconstruct_path(self, came_from: dict, current: Tuple[int, int]) -> List[Tuple[int, int]]:
-        """Reconstruct path from came_from dictionary"""
-        path = [current]
-        while current in came_from:
-            current = came_from[current]
-            path.append(current)
-        return path[::-1]
-```
-
-### Topological Path Planning
-
-```python
-class TopologicalPlanner:
-    """Topological path planning using roadmaps"""
-
-    def __init__(self):
-        self.topological_map = {}  # {node_id: {'coords': (x,y), 'neighbors': [node_ids]}}
-
-    def build_topological_map(self, occupancy_grid: np.ndarray,
-                            landmark_locations: List[Tuple[float, float]]):
-        """Build topological map from landmarks and connectivity"""
-        # Create nodes for each landmark
-        for i, landmark in enumerate(landmark_locations):
-            self.topological_map[i] = {
-                'coords': landmark,
-                'neighbors': []
-            }
-
-        # Connect nearby landmarks
-        for i in range(len(landmark_locations)):
-            for j in range(i + 1, len(landmark_locations)):
-                if self.is_connectable(i, j, occupancy_grid):
-                    self.topological_map[i]['neighbors'].append(j)
-                    self.topological_map[j]['neighbors'].append(i)
-
-    def is_connectable(self, node1: int, node2: int, occupancy_grid: np.ndarray) -> bool:
-        """Check if two nodes can be connected without collision"""
-        coord1 = self.topological_map[node1]['coords']
-        coord2 = self.topological_map[node2]['coords']
-
-        # Check line of sight using Bresenham's algorithm
-        line_points = self.bresenham_line(coord1[0], coord1[1], coord2[0], coord2[1])
-
-        for x, y in line_points:
-            if occupancy_grid[int(y), int(x)] == 1:  # Obstacle
+            if not self.is_configuration_free(intermediate, obstacles):
                 return False
 
         return True
 
-    def bresenham_line(self, x0: float, y0: float, x1: float, y1: float) -> List[Tuple[int, int]]:
-        """Bresenham's line algorithm"""
-        points = []
-        dx = abs(x1 - x0)
-        dy = abs(y1 - y0)
-        x, y = int(x0), int(y0)
-        sx = 1 if x0 < x1 else -1
-        sy = 1 if y0 < y1 else -1
-        err = dx - dy
+    def check_collision(self, config: np.ndarray, obstacle) -> bool:
+        """Check if configuration collides with obstacle"""
+        if hasattr(obstacle, 'contains'):
+            return obstacle.contains(config, self.robot_radius)
+        else:
+            # Generic distance-based collision check
+            return self.distance_to_obstacle(config, obstacle) < self.robot_radius
 
-        while True:
-            points.append((x, y))
-            if x == int(x1) and y == int(y1):
-                break
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x += sx
-            if e2 < dx:
-                err += dx
-                y += sy
+    def distance_to_obstacle(self, config: np.ndarray, obstacle) -> float:
+        """Calculate distance from configuration to obstacle"""
+        if hasattr(obstacle, 'center') and hasattr(obstacle, 'radius'):
+            # Circular/spherical obstacle
+            return np.linalg.norm(config - obstacle.center) - obstacle.radius
+        else:
+            # For other shapes, implement appropriate distance calculation
+            return 1.0  # Default distance
 
-        return points
+    def plan_path(self, start: np.ndarray, goal: np.ndarray,
+                 obstacles: List) -> Optional[List[np.ndarray]]:
+        """Plan path using the pre-built roadmap"""
+        if not self.roadmap or not self.graph:
+            return None
 
-    def plan_topological_path(self, start_coords: Tuple[float, float],
-                            goal_coords: Tuple[float, float]) -> Optional[List[Tuple[float, float]]]:
-        """Plan path through topological map"""
-        # Find nearest start and goal nodes
-        start_node = self.find_nearest_node(start_coords)
-        goal_node = self.find_nearest_node(goal_coords)
+        # Find nearest roadmap nodes to start and goal
+        start_idx = self.find_nearest_node(start)
+        goal_idx = self.find_nearest_node(goal)
 
-        # Use A* on topological graph
-        path = self.astar_topological(start_node, goal_node)
+        # Connect start and goal to roadmap if possible
+        if not self.connect_to_roadmap(start, start_idx, obstacles):
+            return None
+        if not self.connect_to_roadmap(goal, goal_idx, obstacles):
+            return None
 
-        if path:
-            # Convert to coordinates
-            coord_path = [self.topological_map[node]['coords'] for node in path]
-            return coord_path
+        # Use A* to find path in roadmap
+        path_indices = self.astar_search(start_idx, goal_idx)
 
-        return None
+        if path_indices is None:
+            return None
 
-    def find_nearest_node(self, coords: Tuple[float, float]) -> int:
-        """Find nearest topological node to given coordinates"""
-        min_dist = float('inf')
-        nearest_node = 0
+        # Convert indices back to configurations
+        path = [start]  # Add start point
+        for idx in path_indices[1:-1]:  # Skip first (start) and last (goal) which we'll add separately
+            path.append(self.roadmap[idx])
+        path.append(goal)  # Add goal point
 
-        for node_id, node_data in self.topological_map.items():
-            dist = self.euclidean_distance(coords, node_data['coords'])
-            if dist < min_dist:
-                min_dist = dist
-                nearest_node = node_id
+        return path
 
-        return nearest_node
+    def find_nearest_node(self, config: np.ndarray) -> int:
+        """Find nearest roadmap node to given configuration"""
+        if self.nbrs is None:
+            return 0  # Default to first node if not initialized
 
-    def astar_topological(self, start_node: int, goal_node: int) -> Optional[List[int]]:
-        """A* on topological graph"""
-        open_set = [(0, start_node)]
+        _, indices = self.nbrs.kneighbors([config])
+        return indices[0][0]
+
+    def connect_to_roadmap(self, config: np.ndarray, roadmap_idx: int,
+                          obstacles: List) -> bool:
+        """Connect a configuration to the roadmap"""
+        roadmap_config = self.roadmap[roadmap_idx]
+
+        if self.is_path_free(config, roadmap_config, obstacles):
+            # Add to roadmap and connect
+            node_idx = len(self.roadmap)
+            self.roadmap.append(config)
+
+            # Connect to the nearest node
+            self.graph[node_idx] = [roadmap_idx]
+            self.graph[roadmap_idx].append(node_idx)
+
+            return True
+
+        return False
+
+    def astar_search(self, start_idx: int, goal_idx: int) -> Optional[List[int]]:
+        """A* search on the roadmap graph"""
+        open_set = [(0, start_idx)]
         came_from = {}
-        g_score = {start_node: 0}
-        f_score = {start_node: self.euclidean_distance(
-            self.topological_map[start_node]['coords'],
-            self.topological_map[goal_node]['coords']
-        )}
+        g_score = {start_idx: 0}
+        f_score = {start_idx: self.heuristic(start_idx, goal_idx)}
 
         closed_set = set()
 
         while open_set:
             current_f, current = heapq.heappop(open_set)
 
-            if current == goal_node:
+            if current == goal_idx:
                 return self.reconstruct_path_indices(came_from, current)
 
             if current in closed_set:
@@ -1260,29 +1269,177 @@ class TopologicalPlanner:
 
             closed_set.add(current)
 
-            for neighbor in self.topological_map[current]['neighbors']:
+            for neighbor in self.graph.get(current, []):
                 if neighbor in closed_set:
                     continue
 
                 tentative_g = g_score[current] + self.euclidean_distance(
-                    self.topological_map[current]['coords'],
-                    self.topological_map[neighbor]['coords']
+                    self.roadmap[current], self.roadmap[neighbor]
                 )
 
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
-                    f_score[neighbor] = tentative_g + self.euclidean_distance(
-                        self.topological_map[neighbor]['coords'],
-                        self.topological_map[goal_node]['coords']
-                    )
+                    f_score[neighbor] = tentative_g + self.heuristic(neighbor, goal_idx)
                     heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
         return None
 
-    def euclidean_distance(self, coord1: Tuple[float, float], coord2: Tuple[float, float]) -> float:
-        """Calculate Euclidean distance between coordinates"""
-        return np.sqrt((coord1[0] - coord2[0])**2 + (coord1[1] - coord2[1])**2)
+    def heuristic(self, idx1: int, idx2: int) -> float:
+        """Heuristic function for A* (Euclidean distance)"""
+        return self.euclidean_distance(self.roadmap[idx1], self.roadmap[idx2])
+
+    def euclidean_distance(self, config1: np.ndarray, config2: np.ndarray) -> float:
+        """Calculate Euclidean distance between configurations"""
+        return np.linalg.norm(config2 - config1)
+
+    def reconstruct_path_indices(self, came_from: dict, current: int) -> List[int]:
+        """Reconstruct path using node indices"""
+        path = [current]
+        while current in came_from:
+            current = came_from[current]
+            path.append(current)
+        return path[::-1]
+```
+
+## Topological Path Planning
+
+### Visibility Graph for Polygonal Obstacles
+
+For environments with polygonal obstacles, visibility graphs provide optimal solutions:
+
+```python
+from typing import List, Tuple
+import math
+
+class VisibilityGraphPlanner:
+    """Visibility graph planner for polygonal obstacle environments"""
+
+    def __init__(self):
+        self.vertices = []  # All obstacle vertices plus start/goal
+        self.edges = []     # Visibility graph edges
+
+    def plan_path(self, start: Tuple[float, float], goal: Tuple[float, float],
+                 polygons: List[List[Tuple[float, float]]]) -> Optional[List[Tuple[float, float]]]:
+        """
+        Plan path using visibility graph
+        Args:
+            start: Start position
+            goal: Goal position
+            polygons: List of polygons (list of vertex coordinates)
+        Returns:
+            List of waypoints forming the path
+        """
+        # Create visibility graph
+        self.vertices = [start, goal]
+        self.edges = []
+
+        # Add all obstacle vertices
+        for polygon in polygons:
+            self.vertices.extend(polygon)
+
+        # Build visibility graph
+        self.build_visibility_graph(polygons)
+
+        # Use A* to find shortest path in visibility graph
+        path_indices = self.astar_visibility_graph(0, 1)  # 0=start, 1=goal
+
+        if path_indices is None:
+            return None
+
+        # Convert indices back to coordinates
+        path = [self.vertices[idx] for idx in path_indices]
+        return path
+
+    def build_visibility_graph(self, polygons: List[List[Tuple[float, float]]]):
+        """Build visibility graph by checking visibility between all pairs of vertices"""
+        n = len(self.vertices)
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                if self.is_visible(self.vertices[i], self.vertices[j], polygons):
+                    # Calculate distance as edge weight
+                    dist = math.sqrt((self.vertices[i][0] - self.vertices[j][0])**2 +
+                                   (self.vertices[i][1] - self.vertices[j][1])**2)
+                    self.edges.append((i, j, dist))
+                    self.edges.append((j, i, dist))  # Add reverse edge
+
+    def is_visible(self, p1: Tuple[float, float], p2: Tuple[float, float],
+                   polygons: List[List[Tuple[float, float]]]) -> bool:
+        """Check if two points are mutually visible (no obstacle intersections)"""
+        for polygon in polygons:
+            for i in range(len(polygon)):
+                p3 = polygon[i]
+                p4 = polygon[(i + 1) % len(polygon)]
+
+                if self.lines_intersect(p1, p2, p3, p4):
+                    return False
+
+        return True
+
+    def lines_intersect(self, p1: Tuple[float, float], p2: Tuple[float, float],
+                       p3: Tuple[float, float], p4: Tuple[float, float]) -> bool:
+        """Check if line segments p1-p2 and p3-p4 intersect"""
+        x1, y1 = p1
+        x2, y2 = p2
+        x3, y3 = p3
+        x4, y4 = p4
+
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-10:  # Lines are parallel
+            return False
+
+        t_num = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)
+        u_num = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3))
+
+        t = t_num / denom
+        u = u_num / denom
+
+        # Check if intersection point is within both line segments
+        return 0 <= t <= 1 and 0 <= u <= 1
+
+    def astar_visibility_graph(self, start_idx: int, goal_idx: int) -> Optional[List[int]]:
+        """A* search on visibility graph"""
+        open_set = [(0, start_idx)]
+        came_from = {}
+        g_score = {start_idx: 0}
+        f_score = {start_idx: self.heuristic(start_idx, goal_idx)}
+
+        closed_set = set()
+
+        while open_set:
+            current_f, current = heapq.heappop(open_set)
+
+            if current == goal_idx:
+                return self.reconstruct_path_indices(came_from, current)
+
+            if current in closed_set:
+                continue
+
+            closed_set.add(current)
+
+            # Find neighbors (connected by edges)
+            neighbors = [(edge[1], edge[2]) for edge in self.edges if edge[0] == current]
+
+            for neighbor_idx, weight in neighbors:
+                if neighbor_idx in closed_set:
+                    continue
+
+                tentative_g = g_score[current] + weight
+
+                if neighbor_idx not in g_score or tentative_g < g_score[neighbor_idx]:
+                    came_from[neighbor_idx] = current
+                    g_score[neighbor_idx] = tentative_g
+                    f_score[neighbor_idx] = tentative_g + self.heuristic(neighbor_idx, goal_idx)
+                    heapq.heappush(open_set, (f_score[neighbor_idx], neighbor_idx))
+
+        return None
+
+    def heuristic(self, idx1: int, idx2: int) -> float:
+        """Heuristic function (Euclidean distance)"""
+        p1 = self.vertices[idx1]
+        p2 = self.vertices[idx2]
+        return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
     def reconstruct_path_indices(self, came_from: dict, current: int) -> List[int]:
         """Reconstruct path using node indices"""
@@ -1295,7 +1452,9 @@ class TopologicalPlanner:
 
 ## Motion Planning for Manipulation
 
-### Cartesian Path Planning
+### Cartesian Path Planning for Manipulators
+
+For robotic arms, path planning must consider joint limits and kinematic constraints:
 
 ```python
 import numpy as np
@@ -1371,83 +1530,303 @@ class CartesianPathPlanner:
 
         return (s0 * q1) + (s1 * q2)
 
-    def plan_avoiding_obstacles(self, start_pose: np.ndarray, end_pose: np.ndarray,
-                               obstacles: List[np.ndarray],
-                               resolution: float = 0.01) -> List[np.ndarray]:
-        """Plan Cartesian path avoiding obstacles"""
+    def plan_joint_space_path(self, start_joints: np.ndarray, end_joints: np.ndarray,
+                             resolution: float = 0.01) -> List[np.ndarray]:
+        """Plan path in joint space with collision checking"""
+        path = []
+
+        # Calculate joint differences
+        joint_diff = end_joints - start_joints
+        path_length = np.linalg.norm(joint_diff)
+        num_steps = int(path_length / resolution)
+
+        # Generate waypoints
+        for i in range(num_steps + 1):
+            t = i / num_steps if num_steps > 0 else 0
+
+            # Interpolate joint positions
+            current_joints = start_joints + t * joint_diff
+            path.append(current_joints)
+
+        return path
+
+    def plan_with_obstacle_avoidance(self, start_pose: np.ndarray, end_pose: np.ndarray,
+                                   obstacles: List[np.ndarray],
+                                   resolution: float = 0.01) -> List[np.ndarray]:
+        """Plan Cartesian path with obstacle avoidance using potential fields"""
         # Generate initial straight-line path
-        path = self.plan_cartesian_path(start_pose, end_pose, resolution)
+        initial_path = self.plan_cartesian_path(start_pose, end_pose, resolution)
 
-        # Check for collisions and adjust path
-        adjusted_path = []
-        current_pose = start_pose
+        # Apply potential field method to avoid obstacles
+        optimized_path = self.apply_potential_fields(initial_path, obstacles)
 
-        for i, target_pose in enumerate(path):
-            # Check if path to target_pose is collision-free
-            if self.is_path_clear(current_pose, target_pose, obstacles):
-                adjusted_path.append(target_pose)
-                current_pose = target_pose
-            else:
-                # Plan around obstacle
-                detour_poses = self.plan_detour(current_pose, target_pose, obstacles)
-                adjusted_path.extend(detour_poses)
-                current_pose = detour_poses[-1] if detour_poses else current_pose
+        return optimized_path
 
-        return adjusted_path
+    def apply_potential_fields(self, path: List[np.ndarray],
+                              obstacles: List[np.ndarray]) -> List[np.ndarray]:
+        """Apply artificial potential fields to avoid obstacles"""
+        # Parameters for potential field
+        attractive_gain = 1.0
+        repulsive_gain = 2.0
+        obstacle_influence_radius = 1.0
 
-    def is_path_clear(self, start_pose: np.ndarray, end_pose: np.ndarray,
-                     obstacles: List[np.ndarray]) -> bool:
-        """Check if path between poses is clear of obstacles"""
-        # Sample intermediate points along the path
-        path = self.plan_cartesian_path(start_pose, end_pose, resolution=0.05)
+        optimized_path = []
 
-        for pose in path:
-            if self.is_pose_colliding(pose, obstacles):
-                return False
+        for i, pose in enumerate(path):
+            if i == 0 or i == len(path) - 1:  # Keep start and end points
+                optimized_path.append(pose)
+                continue
 
-        return True
+            # Calculate attractive force (pulling toward original path)
+            original_pose = path[i]
+            attractive_force = attractive_gain * (original_pose[:3] - pose[:3])
 
-    def is_pose_colliding(self, pose: np.ndarray, obstacles: List[np.ndarray]) -> bool:
-        """Check if pose collides with any obstacles"""
-        pos = pose[:3]
+            # Calculate repulsive forces from obstacles
+            repulsive_force = np.zeros(3)
+            for obstacle in obstacles:
+                obstacle_pos = obstacle[:3]
+                diff = pose[:3] - obstacle_pos
+                distance = np.linalg.norm(diff)
 
-        for obstacle in obstacles:
-            obs_pos = obstacle[:3]
-            obs_size = obstacle[3:]  # Assuming [x, y, z, size_x, size_y, size_z]
-            distance = np.linalg.norm(pos - obs_pos)
+                if distance < obstacle_influence_radius and distance > 0:
+                    # Repulsive force increases as we get closer
+                    magnitude = repulsive_gain * (1/distance - 1/obstacle_influence_radius) / (distance**2)
+                    direction = diff / distance
+                    repulsive_force += magnitude * direction
 
-            # Simple sphere collision check
-            if distance < np.max(obs_size[:3]) / 2 + 0.1:  # 0.1m buffer
-                return True
+            # Apply net force to adjust position
+            net_force = attractive_force + repulsive_force
+            new_pos = pose[:3] + 0.1 * net_force  # Scaling factor for stability
 
-        return False
+            # Create new pose with adjusted position
+            new_pose = np.hstack([new_pos, pose[3:]])  # Keep orientation unchanged
+            optimized_path.append(new_pose)
 
-    def plan_detour(self, start_pose: np.ndarray, end_pose: np.ndarray,
-                   obstacles: List[np.ndarray]) -> List[np.ndarray]:
-        """Plan a detour around obstacles"""
-        # This is a simplified approach
-        # In practice, you'd use more sophisticated methods like
-        # sampling-based planning or optimization-based approaches
-
-        detour_path = [start_pose]
-
-        # Calculate a simple detour point above the obstacle
-        mid_point = (start_pose[:3] + end_pose[:3]) / 2
-        detour_point = mid_point + np.array([0, 0, 0.2])  # Move up 20cm
-
-        # Create detour pose with same orientation as start
-        detour_pose = np.hstack([detour_point, start_pose[3:]])
-
-        # Plan to detour point and then to end
-        path1 = self.plan_cartesian_path(start_pose, detour_pose, resolution=0.02)
-        path2 = self.plan_cartesian_path(detour_pose, end_pose, resolution=0.02)
-
-        return path1[1:] + path2  # Exclude first element of path2 to avoid duplication
+        return optimized_path
 ```
 
-## Integration with Perception and Control
+## Real-Time Path Planning
 
-### SLAM Integration
+### D* Lite Algorithm for Dynamic Environments
+
+D* Lite is ideal for environments where obstacles appear after planning begins:
+
+```python
+import heapq
+from typing import Dict, List, Tuple, Optional
+
+class DStarLiteNode:
+    """Node for D* Lite algorithm"""
+    def __init__(self, pos: Tuple[int, int]):
+        self.pos = pos
+        self.g = float('inf')
+        self.rhs = float('inf')
+        self.heap_key = (float('inf'), float('inf'))
+
+class DStarLitePlanner:
+    """D* Lite path planning for dynamic environments"""
+
+    def __init__(self, grid_resolution: float = 0.1):
+        self.grid_resolution = grid_resolution
+        self.nodes: Dict[Tuple[int, int], DStarLiteNode] = {}
+        self.open_list = []
+        self.start = None
+        self.goal = None
+        self.last = None
+
+    def plan_path(self, grid: np.ndarray, start: Tuple[int, int],
+                 goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
+        """Initial path planning using D* Lite"""
+        self.start = start
+        self.goal = goal
+        self.last = goal  # Start with goal as "last"
+
+        rows, cols = grid.shape
+
+        # Initialize nodes
+        for i in range(rows):
+            for j in range(cols):
+                pos = (i, j)
+                if pos not in self.nodes:
+                    self.nodes[pos] = DStarLiteNode(pos)
+
+        # Initialize goal
+        self.nodes[goal].rhs = 0
+        self.update_vertex(goal)
+
+        # Compute shortest path
+        self.compute_shortest_path()
+
+        # Extract path
+        path = self.extract_path()
+        return path
+
+    def extract_path(self) -> List[Tuple[int, int]]:
+        """Extract path from start to goal"""
+        path = [self.start]
+        current = self.start
+
+        while current != self.goal:
+            # Find successor with minimum cost
+            min_cost = float('inf')
+            successor = None
+
+            # Check 8-connected neighbors
+            for di in [-1, 0, 1]:
+                for dj in [-1, 0, 1]:
+                    if di == 0 and dj == 0:
+                        continue
+
+                    ni, nj = current[0] + di, current[1] + dj
+                    neighbor = (ni, nj)
+
+                    if (0 <= ni < len(grid) and 0 <= nj < len(grid[0]) and
+                        grid[ni, nj] == 0):  # Free space
+
+                        if neighbor in self.nodes:
+                            cost = self.calculate_cost(current, neighbor)
+                            if cost < min_cost:
+                                min_cost = cost
+                                successor = neighbor
+
+            if successor is None or successor in path:
+                # No valid successor or found a loop
+                break
+
+            path.append(successor)
+            current = successor
+
+        return path if current == self.goal else None
+
+    def update_obstacle(self, pos: Tuple[int, int], is_obstacle: bool):
+        """Update environment when obstacle is detected or cleared"""
+        if pos not in self.nodes:
+            self.nodes[pos] = DStarLiteNode(pos)
+
+        # Update RHS values for affected nodes
+        if is_obstacle:
+            # Mark as obstacle - update neighbors
+            for neighbor in self.get_neighbors(pos):
+                if neighbor in self.nodes:
+                    old_rhs = self.nodes[neighbor].rhs
+                    self.update_rhs(neighbor)
+                    if old_rhs != self.nodes[neighbor].rhs:
+                        self.update_vertex(neighbor)
+        else:
+            # Clear obstacle - update neighbors
+            for neighbor in self.get_neighbors(pos):
+                if neighbor in self.nodes:
+                    old_rhs = self.nodes[neighbor].rhs
+                    self.update_rhs(neighbor)
+                    if old_rhs != self.nodes[neighbor].rhs:
+                        self.update_vertex(neighbor)
+
+        # Update start position if it became an obstacle
+        if pos == self.start and is_obstacle:
+            # Need to replan with new start
+            pass
+
+        # Replan
+        self.compute_shortest_path()
+
+    def update_rhs(self, pos: Tuple[int, int]):
+        """Update RHS value for a node"""
+        if pos == self.goal:
+            self.nodes[pos].rhs = 0
+            return
+
+        min_rhs = float('inf')
+        for neighbor in self.get_neighbors(pos):
+            if neighbor in self.nodes:
+                cost = self.calculate_cost(pos, neighbor) + self.nodes[neighbor].g
+                min_rhs = min(min_rhs, cost)
+
+        self.nodes[pos].rhs = min_rhs
+
+    def update_vertex(self, pos: Tuple[int, int]):
+        """Update vertex in the priority queue"""
+        node = self.nodes[pos]
+
+        if node.g != node.rhs and pos in [item[1] for item in self.open_list]:
+            # Remove from open list
+            self.open_list = [item for item in self.open_list if item[1] != pos]
+
+        if node.g != node.rhs:
+            node.heap_key = self.calculate_key(pos)
+            heapq.heappush(self.open_list, (node.heap_key, pos))
+
+    def calculate_key(self, pos: Tuple[int, int]) -> Tuple[float, float]:
+        """Calculate key for priority queue"""
+        node = self.nodes[pos]
+        min_g_rhs = min(node.g, node.rhs)
+        return (min_g_rhs + self.heuristic(pos, self.start), min_g_rhs)
+
+    def compute_shortest_path(self):
+        """Compute shortest path using D* Lite"""
+        while (self.open_list and
+               (self.open_list[0][0] < self.calculate_key(self.start) or
+                self.nodes[self.start].rhs > self.nodes[self.start].g)):
+
+            k_old, u = heapq.heappop(self.open_list)
+
+            if k_old >= self.calculate_key(u):
+                # Process node
+                if self.nodes[u].rhs > self.nodes[u].g:
+                    # Overconsistent
+                    self.nodes[u].rhs = self.nodes[u].g
+                    for s in self.get_predecessors(u):
+                        self.update_vertex(s)
+                else:
+                    # Underconsistent
+                    old_rhs = self.nodes[u].rhs
+                    self.nodes[u].rhs = float('inf')
+
+                    # Update u and its predecessors
+                    for s in [u] + self.get_predecessors(u):
+                        if self.nodes[s].rhs > self.nodes[u].g + self.calculate_cost(s, u):
+                            if s != self.goal:
+                                self.nodes[s].rhs = self.nodes[u].g + self.calculate_cost(s, u)
+                        self.update_vertex(s)
+
+    def get_neighbors(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """Get 8-connected neighbors"""
+        neighbors = []
+        for di in [-1, 0, 1]:
+            for dj in [-1, 0, 1]:
+                if di == 0 and dj == 0:
+                    continue
+                ni, nj = pos[0] + di, pos[1] + dj
+                neighbors.append((ni, nj))
+        return neighbors
+
+    def get_predecessors(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """Get predecessors (8-connected neighbors)"""
+        return self.get_neighbors(pos)
+
+    def calculate_cost(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
+        """Calculate cost between two positions"""
+        if pos1 == pos2:
+            return 0
+
+        # Manhattan distance with diagonal support
+        dr = abs(pos1[0] - pos2[0])
+        dc = abs(pos1[1] - pos2[1])
+
+        if dr == 1 and dc == 1:
+            return np.sqrt(2)  # Diagonal move
+        else:
+            return dr + dc  # Cardinal move
+
+    def heuristic(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
+        """Heuristic function (Euclidean distance)"""
+        return np.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
+```
+
+## Integration with Perception Systems
+
+### SLAM Integration for Planning
+
+Integrating planning with SLAM for unknown environments:
 
 ```python
 class SLAMIntegratedPlanner:
@@ -1552,371 +1931,1507 @@ class SLAMIntegratedPlanner:
         return (robot_state[0] + 10, robot_state[1])  # 10m ahead
 ```
 
-### Reactive Control Integration
+## Multi-Robot Path Planning
+
+### Conflict-Based Search (CBS) for Multi-Agent Systems
+
+For coordinating multiple robots:
 
 ```python
-class ReactivePlanner:
-    """Reactive planning that adjusts to immediate sensor feedback"""
+class CBSNode:
+    """Node for Conflict-Based Search"""
+    def __init__(self, paths=None, constraints=None, cost=0):
+        self.paths = paths or {}  # {robot_id: path}
+        self.constraints = constraints or {}  # {robot_id: [constraints]}
+        self.cost = cost
 
-    def __init__(self, base_planner, safety_margin=0.5):
-        self.base_planner = base_planner
-        self.safety_margin = safety_margin
-        self.current_path = []
-        self.path_index = 0
+class CBSPlanner:
+    """Conflict-Based Search for multi-robot path planning"""
 
-    def plan_with_reaction(self, robot_state, goal, sensor_data):
-        """Plan with ability to react to immediate obstacles"""
-        # Check if current path is still valid
-        if self.is_path_blocked(sensor_data):
-            # Recalculate path avoiding immediate obstacles
-            self.recalculate_path(robot_state, goal, sensor_data)
+    def __init__(self, num_robots, grid_resolution=0.1):
+        self.num_robots = num_robots
+        self.grid_resolution = grid_resolution
 
-        # Follow current path with reactive adjustments
-        command = self.follow_path_with_adjustments(robot_state, sensor_data)
+    def plan_paths(self, starts: List[Tuple[int, int]], goals: List[Tuple[int, int]],
+                  grid: np.ndarray) -> Optional[Dict[int, List[Tuple[int, int]]]]:
+        """Plan paths for multiple robots using CBS"""
+        # Initialize root node with single path for each robot
+        root = CBSNode()
 
-        return command
+        for robot_id in range(self.num_robots):
+            # Plan individual path for each robot (ignoring others)
+            single_path = self.plan_single_path(
+                grid, starts[robot_id], goals[robot_id]
+            )
+            if single_path is None:
+                return None  # No solution possible
 
-    def is_path_blocked(self, sensor_data):
-        """Check if current path is blocked by immediate obstacles"""
-        if not self.current_path or self.path_index >= len(self.current_path):
+            root.paths[robot_id] = single_path
+            root.cost += len(single_path)  # Path length as cost
+
+        # Check for conflicts
+        open_nodes = [root]
+
+        while open_nodes:
+            current_node = heapq.heappop(open_nodes)
+
+            # Check for conflicts in current solution
+            conflict = self.find_first_conflict(current_node.paths)
+
+            if conflict is None:
+                # No conflicts - solution found
+                return current_node.paths
+
+            # Handle conflict by branching
+            for constraint in self.generate_constraints(conflict):
+                new_node = self.create_constrained_node(current_node, constraint)
+
+                if new_node is not None:  # If new node is valid
+                    heapq.heappush(open_nodes, (new_node.cost, new_node))
+
+        return None  # No solution found
+
+    def find_first_conflict(self, paths: Dict[int, List[Tuple[int, int]]]) -> Optional[dict]:
+        """Find first conflict between robot paths"""
+        # Check for vertex conflicts (two robots at same location at same time)
+        for t in range(max(len(path) for path in paths.values())):
+            locations_at_time = {}
+
+            for robot_id, path in paths.items():
+                if t < len(path):
+                    pos = path[t]
+                    if pos in locations_at_time:
+                        # Conflict found
+                        return {
+                            'type': 'vertex',
+                            'time': t,
+                            'position': pos,
+                            'robots': [locations_at_time[pos], robot_id]
+                        }
+                    locations_at_time[pos] = robot_id
+
+        # Check for edge conflicts (swapping positions between time steps)
+        for t in range(max(len(path) for path in paths.values()) - 1):
+            edges_at_time = {}
+
+            for robot_id, path in paths.items():
+                if t + 1 < len(path):
+                    edge = (path[t], path[t+1])
+                    reversed_edge = (path[t+1], path[t])
+
+                    if edge in edges_at_time or reversed_edge in edges_at_time:
+                        other_robot = edges_at_time.get(edge) or edges_at_time.get(reversed_edge)
+                        return {
+                            'type': 'edge',
+                            'time': t,
+                            'edge': edge,
+                            'robots': [other_robot, robot_id]
+                        }
+
+                    edges_at_time[edge] = robot_id
+
+        return None
+
+    def generate_constraints(self, conflict: dict) -> List[dict]:
+        """Generate constraints to resolve conflict"""
+        constraints = []
+
+        for robot_id in conflict['robots']:
+            constraint = {
+                'robot_id': robot_id,
+                'time': conflict['time'],
+                'position': conflict.get('position'),
+                'edge': conflict.get('edge')
+            }
+            constraints.append(constraint)
+
+        return constraints
+
+    def create_constrained_node(self, parent_node: CBSNode, constraint: dict) -> Optional[CBSNode]:
+        """Create new node with constraint applied"""
+        new_node = CBSNode()
+        new_node.constraints = parent_node.constraints.copy()
+
+        # Add constraint for specific robot
+        robot_id = constraint['robot_id']
+        if robot_id not in new_node.constraints:
+            new_node.constraints[robot_id] = []
+        new_node.constraints[robot_id].append(constraint)
+
+        # Replan path for constrained robot
+        new_node.paths = parent_node.paths.copy()
+
+        start_pos = self.get_robot_start(robot_id)  # This would need to be implemented
+        goal_pos = self.get_robot_goal(robot_id)    # This would need to be implemented
+
+        new_path = self.plan_single_path_with_constraints(
+            grid, start_pos, goal_pos, new_node.constraints[robot_id]
+        )
+
+        if new_path is None:
+            return None  # No valid path with constraint
+
+        new_node.paths[robot_id] = new_path
+        new_node.cost = sum(len(path) for path in new_node.paths.values())
+
+        return new_node
+
+    def plan_single_path_with_constraints(self, grid: np.ndarray, start: Tuple[int, int],
+                                        goal: Tuple[int, int], constraints: List[dict]):
+        """Plan path for single robot with temporal constraints"""
+        # This would implement a modified A* that respects constraints
+        # For now, return a basic A* path (without constraints)
+        planner = AStarPlanner()
+        return planner.plan_path(grid, start, goal)
+
+    def plan_single_path(self, grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]):
+        """Plan path for single robot"""
+        planner = AStarPlanner()
+        return planner.plan_path(grid, start, goal)
+
+    def get_robot_start(self, robot_id: int):
+        """Get start position for robot (would need to be stored)"""
+        # Placeholder - in real implementation this would be stored
+        return (0, 0)
+
+    def get_robot_goal(self, robot_id: int):
+        """Get goal position for robot (would need to be stored)"""
+        # Placeholder - in real implementation this would be stored
+        return (10, 10)
+```
+
+## Reactive Navigation
+
+### Vector Field Histogram (VFH) for Real-Time Navigation
+
+VFH provides efficient local navigation for real-time applications:
+
+```python
+class VFHNavigator:
+    """Vector Field Histogram navigator for real-time obstacle avoidance"""
+
+    def __init__(self, robot_radius: float = 0.5, sensor_range: float = 5.0,
+                 sector_angle: float = 5.0, window_size: int = 5):
+        self.robot_radius = robot_radius
+        self.sensor_range = sensor_range
+        self.sector_angle = sector_angle
+        self.window_size = window_size
+        self.num_sectors = int(360 / sector_angle)
+        self.histogram = np.zeros(self.num_sectors)
+        self.current_heading = 0.0
+
+    def navigate(self, robot_state: RobotState, goal: Tuple[float, float],
+                sensor_data: List[float]) -> Tuple[float, float]:
+        """
+        Navigate using VFH algorithm
+        Args:
+            robot_state: Current robot state
+            goal: Goal position (x, y)
+            sensor_data: List of distance measurements from sensors
+        Returns:
+            Linear and angular velocity commands
+        """
+        # Build polar histogram from sensor data
+        self.histogram = self.build_histogram(sensor_data)
+
+        # Smooth histogram
+        self.histogram = self.smooth_histogram(self.histogram)
+
+        # Threshold histogram to create binary map (obstacle/free)
+        thresholded = self.threshold_histogram(self.histogram)
+
+        # Find admissible directions
+        admissible_dirs = self.find_admissible_directions(thresholded)
+
+        # Select direction based on goal and admissible directions
+        target_dir = self.select_direction(robot_state, goal, admissible_dirs)
+
+        # Generate velocity commands
+        linear_vel, angular_vel = self.generate_velocity_commands(
+            robot_state, target_dir, goal
+        )
+
+        return linear_vel, angular_vel
+
+    def build_histogram(self, sensor_data: List[float]) -> np.ndarray:
+        """Build polar histogram from sensor readings"""
+        histogram = np.zeros(self.num_sectors)
+
+        # Each sensor reading corresponds to a direction
+        num_sensors = len(sensor_data)
+        angle_increment = 360.0 / num_sensors
+
+        for i, distance in enumerate(sensor_data):
+            if distance < self.sensor_range:
+                # Calculate which sector this sensor reading affects
+                center_sector = int((i * angle_increment) / self.sector_angle) % self.num_sectors
+
+                # Mark sectors as occupied based on distance
+                # Closer obstacles have higher values
+                occupancy_value = max(0, 1 - distance / self.sensor_range)
+
+                # Distribute occupancy across nearby sectors (spreading effect)
+                spread = 2  # Number of sectors to spread to each side
+                for offset in range(-spread, spread + 1):
+                    sector_idx = (center_sector + offset) % self.num_sectors
+                    histogram[sector_idx] = max(histogram[sector_idx], occupancy_value)
+
+        return histogram
+
+    def smooth_histogram(self, histogram: np.ndarray) -> np.ndarray:
+        """Apply smoothing to reduce noise"""
+        smoothed = np.zeros_like(histogram)
+
+        for i in range(len(histogram)):
+            # Apply moving average with circular boundary handling
+            total = 0
+            count = 0
+
+            for offset in range(-self.window_size // 2, self.window_size // 2 + 1):
+                idx = (i + offset) % len(histogram)
+                total += histogram[idx]
+                count += 1
+
+            smoothed[i] = total / count
+
+        return smoothed
+
+    def threshold_histogram(self, histogram: np.ndarray, threshold: float = 0.3) -> np.ndarray:
+        """Convert histogram to binary (obstacle/non-obstacle)"""
+        return (histogram > threshold).astype(float)
+
+    def find_admissible_directions(self, thresholded_hist: np.ndarray) -> List[int]:
+        """Find directions that are free of obstacles"""
+        admissible = []
+
+        for i, value in enumerate(thresholded_hist):
+            if value == 0:  # Free space
+                admissible.append(i)
+
+        return admissible
+
+    def select_direction(self, robot_state: RobotState, goal: Tuple[float, float],
+                        admissible_dirs: List[int]) -> int:
+        """Select direction based on goal and admissible directions"""
+        if not admissible_dirs:
+            # No admissible directions - emergency stop
+            return -1
+
+        # Calculate desired direction to goal
+        goal_angle = np.arctan2(goal[1] - robot_state.y, goal[0] - robot_state.x)
+        desired_sector = int(((goal_angle * 180 / np.pi) + 180) / self.sector_angle) % self.num_sectors
+
+        # Find the admissible direction closest to desired direction
+        best_dir = admissible_dirs[0]
+        min_diff = float('inf')
+
+        for dir_idx in admissible_dirs:
+            # Calculate angular difference (considering wrap-around)
+            diff = min(abs(dir_idx - desired_sector),
+                      self.num_sectors - abs(dir_idx - desired_sector))
+
+            if diff < min_diff:
+                min_diff = diff
+                best_dir = dir_idx
+
+        return best_dir
+
+    def generate_velocity_commands(self, robot_state: RobotState, target_dir: int,
+                                 goal: Tuple[float, float]) -> Tuple[float, float]:
+        """Generate velocity commands based on target direction"""
+        if target_dir == -1:  # Emergency stop
+            return 0.0, 0.0
+
+        # Calculate target heading
+        target_heading = (target_dir * self.sector_angle - 180) * np.pi / 180.0
+
+        # Calculate heading error
+        heading_error = target_heading - robot_state.theta
+        # Normalize to [-π, π]
+        heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+
+        # Calculate distance to goal
+        goal_dist = np.sqrt((goal[0] - robot_state.x)**2 + (goal[1] - robot_state.y)**2)
+
+        # Generate commands
+        if goal_dist < 0.5:  # Close to goal
+            linear_vel = 0.0  # Stop
+            angular_vel = 0.0
+        else:
+            # Adjust linear velocity based on heading error
+            linear_vel = max(0.2, 0.5 * (1 - abs(heading_error) / np.pi))
+            angular_vel = max(-0.5, min(0.5, 2.0 * heading_error))
+
+        return linear_vel, angular_vel
+
+    def update_heading(self, new_heading: float):
+        """Update robot's current heading"""
+        self.current_heading = new_heading
+```
+
+## Planning with Uncertainty
+
+### Probabilistic Roadmaps with Uncertainty (PRM-U)
+
+For environments with uncertain obstacles:
+
+```python
+class UncertainObstacle:
+    """Representation of an obstacle with uncertainty"""
+    def __init__(self, center: Tuple[float, float], radius: float,
+                 probability: float, variance: float = 0.1):
+        self.center = np.array(center)
+        self.radius = radius
+        self.probability = probability  # Probability of existence
+        self.variance = variance        # Spatial uncertainty
+
+    def collision_probability(self, point: np.ndarray) -> float:
+        """Calculate collision probability with this uncertain obstacle"""
+        distance = np.linalg.norm(point - self.center)
+        if distance <= self.radius:
+            return self.probability
+        else:
+            # Decrease probability with distance
+            normalized_distance = (distance - self.radius) / self.variance
+            # Use Gaussian decay for spatial uncertainty
+            spatial_prob = np.exp(-0.5 * normalized_distance**2)
+            return self.probability * spatial_prob
+
+class PRMUPlanner:
+    """Probabilistic Roadmap with Uncertainty for uncertain environments"""
+
+    def __init__(self, workspace_bounds: List[Tuple[float, float]],
+                 robot_radius: float = 0.3, num_samples: int = 1000,
+                 collision_threshold: float = 0.1):
+        self.bounds = workspace_bounds
+        self.robot_radius = robot_radius
+        self.num_samples = num_samples
+        self.collision_threshold = collision_threshold  # Max allowed collision probability
+        self.roadmap = []
+        self.graph = {}
+
+    def build_roadmap(self, uncertain_obstacles: List[UncertainObstacle]):
+        """Build roadmap considering obstacle uncertainty"""
+        # Sample valid configurations (low collision probability)
+        valid_configs = []
+
+        for _ in range(self.num_samples):
+            config = self.sample_configuration()
+            collision_prob = self.total_collision_probability(config, uncertain_obstacles)
+
+            if collision_prob < self.collision_threshold:
+                valid_configs.append(config)
+
+        if len(valid_configs) < 2:
+            return False  # Not enough safe configurations
+
+        # Build connectivity graph
+        self.roadmap = valid_configs
+        roadmap_array = np.array(self.roadmap)
+
+        # Use k-nearest neighbors to connect nodes
+        from sklearn.neighbors import NearestNeighbors
+        nbrs = NearestNeighbors(n_neighbors=min(10, len(self.roadmap)),
+                               algorithm='ball_tree').fit(roadmap_array)
+
+        distances, indices = nbrs.kneighbors(roadmap_array)
+
+        self.graph = {i: [] for i in range(len(self.roadmap))}
+
+        for i, (dist_row, idx_row) in enumerate(zip(distances, indices)):
+            for j, (dist, idx) in enumerate(zip(dist_row, idx_row)):
+                if i != idx:  # Don't connect to self
+                    # Check path collision probability
+                    path_prob = self.path_collision_probability(
+                        self.roadmap[i], self.roadmap[idx], uncertain_obstacles
+                    )
+
+                    if path_prob < self.collision_threshold:
+                        self.graph[i].append((idx, dist))  # Store neighbor and distance
+                        self.graph[idx].append((i, dist))  # Bidirectional
+
+        return True
+
+    def sample_configuration(self) -> np.ndarray:
+        """Sample random configuration within bounds"""
+        config = []
+        for bound in self.bounds:
+            val = random.uniform(bound[0], bound[1])
+            config.append(val)
+        return np.array(config)
+
+    def total_collision_probability(self, config: np.ndarray,
+                                  obstacles: List[UncertainObstacle]) -> float:
+        """Calculate total collision probability at configuration"""
+        # Calculate probability of collision with any obstacle
+        # Using the inclusion-exclusion principle approximation
+        total_prob = 0.0
+        for obstacle in obstacles:
+            prob = obstacle.collision_probability(config)
+            total_prob += prob * (1 - total_prob)  # P(A or B) ≈ P(A) + P(B)*(1-P(A))
+
+        return min(total_prob, 1.0)  # Cap at 1.0
+
+    def path_collision_probability(self, config1: np.ndarray, config2: np.ndarray,
+                                 obstacles: List[UncertainObstacle]) -> float:
+        """Calculate collision probability along path between configurations"""
+        # Sample points along the path and calculate max collision probability
+        steps = int(np.linalg.norm(config2 - config1) / self.robot_radius * 2)
+        max_prob = 0.0
+
+        for i in range(1, steps):
+            t = i / steps
+            intermediate = (1 - t) * config1 + t * config2
+            prob = self.total_collision_probability(intermediate, obstacles)
+            max_prob = max(max_prob, prob)
+
+        return max_prob
+
+    def plan_path(self, start: np.ndarray, goal: np.ndarray,
+                 uncertain_obstacles: List[UncertainObstacle]) -> Optional[List[np.ndarray]]:
+        """Plan path in uncertain environment"""
+        # Find nearest roadmap nodes to start and goal
+        start_idx = self.find_nearest_safe_node(start, uncertain_obstacles)
+        goal_idx = self.find_nearest_safe_node(goal, uncertain_obstacles)
+
+        if start_idx is None or goal_idx is None:
+            return None
+
+        # Connect start and goal to roadmap
+        start_connected = self.connect_to_roadmap(start, start_idx, uncertain_obstacles)
+        goal_connected = self.connect_to_roadmap(goal, goal_idx, uncertain_obstacles)
+
+        if not (start_connected and goal_connected):
+            return None
+
+        # Use A* to find path in roadmap
+        path_indices = self.uncertain_astar_search(start_idx, goal_idx)
+
+        if path_indices is None:
+            return None
+
+        # Convert indices back to configurations
+        path = [start]
+        for idx in path_indices[1:-1]:  # Skip first (start) and last (goal) which we'll add separately
+            path.append(self.roadmap[idx])
+        path.append(goal)
+
+        return path
+
+    def find_nearest_safe_node(self, config: np.ndarray,
+                             obstacles: List[UncertainObstacle]) -> Optional[int]:
+        """Find nearest roadmap node that's safe"""
+        min_dist = float('inf')
+        nearest_idx = None
+
+        for i, roadmap_config in enumerate(self.roadmap):
+            dist = np.linalg.norm(config - roadmap_config)
+            if dist < min_dist:
+                collision_prob = self.total_collision_probability(roadmap_config, obstacles)
+                if collision_prob < self.collision_threshold:
+                    min_dist = dist
+                    nearest_idx = i
+
+        return nearest_idx
+
+    def connect_to_roadmap(self, config: np.ndarray, roadmap_idx: int,
+                          obstacles: List[UncertainObstacle]) -> bool:
+        """Connect a configuration to the roadmap"""
+        roadmap_config = self.roadmap[roadmap_idx]
+        path_prob = self.path_collision_probability(config, roadmap_config, obstacles)
+
+        if path_prob < self.collision_threshold:
+            # Add to roadmap temporarily and connect
+            node_idx = len(self.roadmap)
+            self.roadmap.append(config)
+
+            # Connect to the nearest node
+            dist = np.linalg.norm(config - roadmap_config)
+            self.graph[node_idx] = [(roadmap_idx, dist)]
+            self.graph[roadmap_idx].append((node_idx, dist))
+
             return True
 
-        # Check immediate vicinity of robot for obstacles
-        for distance in sensor_data:
-            if distance < self.safety_margin:
+        return False
+
+    def uncertain_astar_search(self, start_idx: int, goal_idx: int) -> Optional[List[int]]:
+        """A* search on uncertain roadmap"""
+        open_set = [(0, start_idx)]
+        came_from = {}
+        g_score = {start_idx: 0}
+        f_score = {start_idx: self.uncertain_heuristic(start_idx, goal_idx)}
+
+        closed_set = set()
+
+        while open_set:
+            current_f, current = heapq.heappop(open_set)
+
+            if current == goal_idx:
+                return self.reconstruct_path_indices(came_from, current)
+
+            if current in closed_set:
+                continue
+
+            closed_set.add(current)
+
+            for neighbor_idx, edge_weight in self.graph.get(current, []):
+                if neighbor_idx in closed_set:
+                    continue
+
+                tentative_g = g_score[current] + edge_weight
+
+                if neighbor_idx not in g_score or tentative_g < g_score[neighbor_idx]:
+                    came_from[neighbor_idx] = current
+                    g_score[neighbor_idx] = tentative_g
+                    f_score[neighbor_idx] = tentative_g + self.uncertain_heuristic(neighbor_idx, goal_idx)
+                    heapq.heappush(open_set, (f_score[neighbor_idx], neighbor_idx))
+
+        return None
+
+    def uncertain_heuristic(self, idx1: int, idx2: int) -> float:
+        """Heuristic function for uncertain A*"""
+        return np.linalg.norm(self.roadmap[idx1] - self.roadmap[idx2])
+
+    def reconstruct_path_indices(self, came_from: dict, current: int) -> List[int]:
+        """Reconstruct path using node indices"""
+        path = [current]
+        while current in came_from:
+            current = came_from[current]
+            path.append(current)
+        return path[::-1]
+```
+
+## Performance Optimization Strategies
+
+### Hierarchical Path Planning
+
+For large environments, hierarchical planning can significantly improve efficiency:
+
+```python
+class HierarchicalPlanner:
+    """Hierarchical path planning for large environments"""
+
+    def __init__(self, environment_size: Tuple[int, int],
+                 high_res_factor: int = 10, low_res_factor: int = 100):
+        self.env_width, self.env_height = environment_size
+        self.high_res_factor = high_res_factor  # High-res grid resolution
+        self.low_res_factor = low_res_factor   # Low-res grid resolution (for coarse planning)
+        self.coarse_grid = None
+        self.fine_grid = None
+
+    def plan_hierarchical_path(self, start: Tuple[float, float], goal: Tuple[float, float],
+                              fine_grid: np.ndarray) -> Optional[List[Tuple[float, float]]]:
+        """
+        Plan path using hierarchical approach:
+        1. Plan coarse path on low-resolution grid
+        2. Plan fine paths between coarse waypoints
+        """
+        # Create coarse grid by downsampling fine grid
+        coarse_grid = self.create_coarse_grid(fine_grid)
+        self.fine_grid = fine_grid
+
+        # Plan coarse path
+        coarse_start = self.world_to_coarse(start)
+        coarse_goal = self.world_to_coarse(goal)
+
+        coarse_path = self.plan_coarse_path(coarse_grid, coarse_start, coarse_goal)
+
+        if not coarse_path:
+            return None
+
+        # Plan fine paths between consecutive coarse waypoints
+        fine_path = []
+        current_pos = start
+
+        for i in range(len(coarse_path)):
+            coarse_waypoint = self.coarse_to_world(coarse_path[i])
+
+            # Plan fine path from current position to coarse waypoint
+            fine_segment = self.plan_fine_path(current_pos, coarse_waypoint)
+
+            if fine_segment:
+                # Add segment (excluding first point if not at start)
+                if i == 0:
+                    fine_path.extend(fine_segment)
+                else:
+                    fine_path.extend(fine_segment[1:])  # Exclude duplicate
+
+                if fine_segment:
+                    current_pos = fine_segment[-1]
+            else:
+                # If fine path fails, try to replan the coarse path
+                return self.replan_with_fine_grid(start, goal)
+
+        # Add final segment to goal
+        final_segment = self.plan_fine_path(current_pos, goal)
+        if final_segment:
+            fine_path.extend(final_segment[1:])  # Exclude duplicate
+        else:
+            # If fine path to goal fails, try replanning
+            return self.replan_with_fine_grid(start, goal)
+
+        return fine_path
+
+    def create_coarse_grid(self, fine_grid: np.ndarray) -> np.ndarray:
+        """Create coarse grid by downsampling fine grid"""
+        factor = self.low_res_factor // self.high_res_factor  # Coarsening factor
+        coarse_rows = fine_grid.shape[0] // factor
+        coarse_cols = fine_grid.shape[1] // factor
+
+        coarse_grid = np.zeros((coarse_rows, coarse_cols), dtype=np.uint8)
+
+        # Downsample by taking majority vote in each coarse cell
+        for i in range(coarse_rows):
+            for j in range(coarse_cols):
+                fine_i_start = i * factor
+                fine_i_end = min((i + 1) * factor, fine_grid.shape[0])
+                fine_j_start = j * factor
+                fine_j_end = min((j + 1) * factor, fine_grid.shape[1])
+
+                # Count obstacles in this region
+                region = fine_grid[fine_i_start:fine_i_end, fine_j_start:fine_j_end]
+                obstacle_count = np.sum(region == 1)
+                total_cells = region.size
+
+                # Mark as obstacle if majority of cells are obstacles
+                if obstacle_count > total_cells / 2:
+                    coarse_grid[i, j] = 1
+
+        return coarse_grid
+
+    def world_to_coarse(self, world_pos: Tuple[float, float]) -> Tuple[int, int]:
+        """Convert world coordinates to coarse grid coordinates"""
+        coarse_x = int(world_pos[0] / self.low_res_factor)
+        coarse_y = int(world_pos[1] / self.low_res_factor)
+        return (coarse_x, coarse_y)
+
+    def coarse_to_world(self, coarse_pos: Tuple[int, int]) -> Tuple[float, float]:
+        """Convert coarse grid coordinates to world coordinates"""
+        world_x = coarse_pos[0] * self.low_res_factor + self.low_res_factor / 2
+        world_y = coarse_pos[1] * self.low_res_factor + self.low_res_factor / 2
+        return (world_x, world_y)
+
+    def plan_coarse_path(self, coarse_grid: np.ndarray, start: Tuple[int, int],
+                        goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
+        """Plan path on coarse grid using A*"""
+        planner = AStarPlanner(grid_resolution=self.low_res_factor)
+        return planner.plan_path(coarse_grid, start, goal)
+
+    def plan_fine_path(self, start: Tuple[float, float], goal: Tuple[float, float]) -> Optional[List[Tuple[float, float]]]:
+        """Plan path on fine grid between two points"""
+        # Convert world coordinates to fine grid coordinates
+        fine_start = self.world_to_fine(start)
+        fine_goal = self.world_to_fine(goal)
+
+        # Plan path on fine grid
+        planner = AStarPlanner(grid_resolution=self.high_res_factor)
+        fine_path_indices = planner.plan_path(self.fine_grid, fine_start, fine_goal)
+
+        if fine_path_indices:
+            # Convert back to world coordinates
+            world_path = [self.fine_to_world(pos) for pos in fine_path_indices]
+            return world_path
+
+        return None
+
+    def world_to_fine(self, world_pos: Tuple[float, float]) -> Tuple[int, int]:
+        """Convert world coordinates to fine grid coordinates"""
+        fine_x = int(world_pos[0] / self.high_res_factor)
+        fine_y = int(world_pos[1] / self.high_res_factor)
+        return (fine_x, fine_y)
+
+    def fine_to_world(self, fine_pos: Tuple[int, int]) -> Tuple[float, float]:
+        """Convert fine grid coordinates to world coordinates"""
+        world_x = fine_pos[0] * self.high_res_factor + self.high_res_factor / 2
+        world_y = fine_pos[1] * self.high_res_factor + self.high_res_factor / 2
+        return (world_x, world_y)
+
+    def replan_with_fine_grid(self, start: Tuple[float, float],
+                             goal: Tuple[float, float]) -> Optional[List[Tuple[float, float]]]:
+        """Replan using only fine grid when hierarchical planning fails"""
+        fine_start = self.world_to_fine(start)
+        fine_goal = self.world_to_fine(goal)
+
+        planner = AStarPlanner(grid_resolution=self.high_res_factor)
+        fine_path_indices = planner.plan_path(self.fine_grid, fine_start, fine_goal)
+
+        if fine_path_indices:
+            world_path = [self.fine_to_world(pos) for pos in fine_path_indices]
+            return world_path
+
+        return None
+```
+
+## Safety-Critical Navigation
+
+### Formal Verification for Safe Navigation
+
+For safety-critical applications, formal verification methods can ensure safety properties:
+
+```python
+class SafetyVerifiedPlanner:
+    """Safety-verified navigation planner with formal guarantees"""
+
+    def __init__(self, robot_model, safety_constraints):
+        self.robot_model = robot_model
+        self.safety_constraints = safety_constraints
+        self.verification_engine = self.initialize_verification_engine()
+
+    def initialize_verification_engine(self):
+        """Initialize formal verification engine"""
+        # In practice, this would interface with a theorem prover
+        # or model checker like NuSMV, SPIN, or Coq
+        return SafetyVerificationEngine()
+
+    def plan_safe_path(self, start: np.ndarray, goal: np.ndarray,
+                      environment: dict) -> Optional[List[np.ndarray]]:
+        """
+        Plan path with formal safety guarantees
+        Uses model checking to verify safety properties
+        """
+        # Generate candidate path
+        candidate_path = self.generate_candidate_path(start, goal, environment)
+
+        if not candidate_path:
+            return None
+
+        # Verify safety properties using formal methods
+        safety_properties = [
+            self.avoid_obstacles_property(candidate_path, environment),
+            self.respect_dynamics_property(candidate_path),
+            self.maintain_controllability_property(candidate_path)
+        ]
+
+        # Verify all safety properties hold
+        if all(self.verification_engine.verify(property) for property in safety_properties):
+            return candidate_path
+        else:
+            # If safety verification fails, use safer but more conservative planning
+            return self.plan_conservative_path(start, goal, environment)
+
+    def avoid_obstacles_property(self, path: List[np.ndarray], environment: dict):
+        """Define obstacle avoidance safety property"""
+        # This would be expressed in a formal specification language
+        # like Linear Temporal Logic (LTL) or Computation Tree Logic (CTL)
+        property_spec = """
+        G (robot_position -> !obstacle_at_position(robot_position))
+        """
+        return SafetyProperty(property_spec, path=path, environment=environment)
+
+    def respect_dynamics_property(self, path: List[np.ndarray]):
+        """Define dynamics respect safety property"""
+        property_spec = """
+        G (||velocity|| <= max_velocity AND ||acceleration|| <= max_acceleration)
+        """
+        return SafetyProperty(property_spec, path=path)
+
+    def maintain_controllability_property(self, path: List[np.ndarray]):
+        """Define controllability safety property"""
+        property_spec = """
+        G (reachable(robot_position) AND controllable(robot_position))
+        """
+        return SafetyProperty(property_spec, path=path)
+
+    def generate_candidate_path(self, start: np.ndarray, goal: np.ndarray,
+                               environment: dict) -> Optional[List[np.ndarray]]:
+        """Generate candidate path using standard planning algorithm"""
+        # Use RRT* or similar algorithm to generate path
+        planner = RRTStarPlanner(
+            workspace_bounds=[(-10, 10), (-10, 10)],
+            robot_radius=0.5,
+            step_size=0.5
+        )
+
+        obstacles = environment.get('obstacles', [])
+        return planner.plan_path(start, goal, obstacles)
+
+    def plan_conservative_path(self, start: np.ndarray, goal: np.ndarray,
+                              environment: dict) -> Optional[List[np.ndarray]]:
+        """Plan more conservative path when safety verification fails"""
+        # Use conservative planning with larger safety margins
+        conservative_obstacles = self.expand_obstacles(environment['obstacles'], margin=0.5)
+
+        planner = RRTStarPlanner(
+            workspace_bounds=[(-10, 10), (-10, 10)],
+            robot_radius=1.0,  # Larger effective radius for safety
+            step_size=0.3      # Smaller steps for more careful planning
+        )
+
+        return planner.plan_path(start, goal, conservative_obstacles)
+
+    def expand_obstacles(self, obstacles: List, margin: float) -> List:
+        """Expand obstacles by safety margin"""
+        expanded_obstacles = []
+        for obstacle in obstacles:
+            expanded_obstacles.append({
+                'center': obstacle['center'],
+                'radius': obstacle['radius'] + margin
+            })
+        return expanded_obstacles
+
+class SafetyProperty:
+    """Wrapper for safety properties"""
+    def __init__(self, specification: str, **context):
+        self.specification = specification
+        self.context = context
+
+class SafetyVerificationEngine:
+    """Placeholder for formal verification engine"""
+    def verify(self, property: SafetyProperty) -> bool:
+        """Verify a safety property holds"""
+        # In a real implementation, this would interface with a theorem prover
+        # or model checker to formally verify the property
+        return True  # Placeholder
+```
+
+## Multi-Modal Navigation
+
+### Integration with Semantic Perception
+
+Combining geometric and semantic information for navigation:
+
+```python
+class SemanticNavigationPlanner:
+    """Navigation planner that integrates semantic perception"""
+
+    def __init__(self, geometric_planner, semantic_analyzer):
+        self.geometric_planner = geometric_planner
+        self.semantic_analyzer = semantic_analyzer
+        self.semantic_map = None
+
+    def plan_semantic_aware_path(self, start: Tuple[float, float],
+                                goal: Tuple[float, float],
+                                perception_data: dict) -> Optional[List[Tuple[float, float]]]:
+        """
+        Plan path considering both geometric and semantic information
+        perception_data includes: semantic segmentation, object detection, affordances
+        """
+        # Update semantic map with current perception data
+        self.semantic_map = self.update_semantic_map(perception_data)
+
+        # Extract semantic constraints
+        navigable_regions = self.identify_navigable_regions()
+        preferred_paths = self.identify_preferred_paths()
+        avoid_regions = self.identify_avoid_regions()
+
+        # Plan geometric path with semantic constraints
+        constrained_path = self.plan_with_semantic_constraints(
+            start, goal, navigable_regions, preferred_paths, avoid_regions
+        )
+
+        return constrained_path
+
+    def update_semantic_map(self, perception_data: dict):
+        """Update semantic map with current perception data"""
+        semantic_map = {
+            'objects': perception_data.get('objects', []),
+            'affordances': perception_data.get('affordances', {}),
+            'traversability': perception_data.get('traversability', {}),
+            'social_zones': perception_data.get('social_zones', {})
+        }
+        return semantic_map
+
+    def identify_navigable_regions(self) -> List[str]:
+        """Identify regions that are semantically navigable"""
+        navigable = []
+
+        for obj in self.semantic_map['objects']:
+            if obj['class'] in ['floor', 'grass', 'path', 'road']:
+                navigable.append(obj['region'])
+
+        return navigable
+
+    def identify_preferred_paths(self) -> List[str]:
+        """Identify paths that are semantically preferred"""
+        preferred = []
+
+        for obj in self.semantic_map['objects']:
+            if obj['class'] in ['walkway', 'sidewalk', 'corridor']:
+                preferred.append(obj['region'])
+
+        return preferred
+
+    def identify_avoid_regions(self) -> List[str]:
+        """Identify regions to semantically avoid"""
+        avoid = []
+
+        for obj in self.semantic_map['objects']:
+            if obj['class'] in ['stairs', 'cliff', 'water', 'fire']:
+                avoid.append(obj['region'])
+
+        # Also avoid social zones where humans are present
+        for zone in self.semantic_map['social_zones']:
+            if zone['human_density'] > 0.5:  # If more than 50% human presence
+                avoid.append(zone['region'])
+
+        return avoid
+
+    def plan_with_semantic_constraints(self, start: Tuple[float, float],
+                                     goal: Tuple[float, float],
+                                     navigable_regions: List[str],
+                                     preferred_paths: List[str],
+                                     avoid_regions: List[str]) -> Optional[List[Tuple[float, float]]]:
+        """Plan path with semantic constraints using modified A*"""
+        # Create a modified grid that incorporates semantic information
+        semantic_grid = self.create_semantic_grid(navigable_regions,
+                                                preferred_paths,
+                                                avoid_regions)
+
+        # Modify the planner to consider semantic costs
+        path = self.geometric_planner.plan_path_with_costs(
+            semantic_grid, start, goal
+        )
+
+        return path
+
+    def create_semantic_grid(self, navigable_regions: List[str],
+                           preferred_paths: List[str],
+                           avoid_regions: List[str]) -> np.ndarray:
+        """Create grid that incorporates semantic information"""
+        # This would create a grid where each cell has semantic cost
+        # 0 = free space, 1 = obstacle, < 1 = preferred, > 1 = avoided
+        base_grid = self.geometric_planner.get_base_grid()
+        semantic_grid = base_grid.astype(float)
+
+        # Apply semantic modifiers
+        for region in preferred_paths:
+            # Lower cost for preferred paths
+            self.apply_region_modifier(semantic_grid, region, multiplier=0.5)
+
+        for region in avoid_regions:
+            # Higher cost for avoid regions
+            self.apply_region_modifier(semantic_grid, region, multiplier=2.0)
+
+        return semantic_grid
+
+    def apply_region_modifier(self, grid: np.ndarray, region: str,
+                            multiplier: float):
+        """Apply cost modifier to a specific region"""
+        # This would identify grid cells belonging to the region
+        # and multiply their costs by the multiplier
+        pass  # Implementation would depend on region representation
+```
+
+## Benchmarking and Evaluation
+
+### Navigation Performance Metrics
+
+```python
+class NavigationEvaluator:
+    """Evaluation framework for navigation algorithms"""
+
+    def __init__(self, environment, robot_model):
+        self.environment = environment
+        self.robot_model = robot_model
+        self.metrics = {
+            'success_rate': [],
+            'path_efficiency': [],  # Ratio of actual path length to optimal
+            'time_to_completion': [],
+            'energy_consumption': [],
+            'safety_violations': [],
+            'computational_efficiency': [],  # Planning time per step
+            'smoothness': [],  # Path smoothness measure
+            'robustness': []    # Success rate under perturbations
+        }
+
+    def evaluate_planner(self, planner, test_cases: List[dict]) -> dict:
+        """Evaluate planner on test cases"""
+        for test_case in test_cases:
+            result = self.run_test_case(planner, test_case)
+            self.aggregate_results(result)
+
+        return self.compute_summary_statistics()
+
+    def run_test_case(self, planner, test_case: dict) -> dict:
+        """Run a single test case and return results"""
+        start_time = time.time()
+        start_pos = test_case['start']
+        goal_pos = test_case['goal']
+        environment = test_case['environment']
+
+        # Plan path
+        path = planner.plan_path(start_pos, goal_pos, environment)
+
+        # Execute path and collect metrics
+        execution_result = self.execute_path(path, environment)
+
+        # Compute metrics
+        metrics = {
+            'success': execution_result['success'],
+            'path_length': execution_result['path_length'],
+            'execution_time': time.time() - start_time,
+            'collisions': execution_result['collisions'],
+            'energy_used': execution_result['energy_used']
+        }
+
+        return metrics
+
+    def execute_path(self, path: List[Tuple[float, float]],
+                    environment: dict) -> dict:
+        """Execute path in environment and collect metrics"""
+        if not path:
+            return {
+                'success': False,
+                'path_length': 0,
+                'collisions': 0,
+                'energy_used': 0
+            }
+
+        total_length = 0
+        collisions = 0
+        energy_used = 0
+        current_pos = path[0]
+
+        for next_pos in path[1:]:
+            # Calculate segment length
+            segment_length = np.linalg.norm(np.array(next_pos) - np.array(current_pos))
+            total_length += segment_length
+
+            # Check for collisions
+            if self.check_collision(current_pos, next_pos, environment):
+                collisions += 1
+
+            # Calculate energy (simplified)
+            energy_used += segment_length * self.estimate_energy_cost(current_pos, next_pos)
+
+            current_pos = next_pos
+
+        return {
+            'success': len(path) > 1,  # Non-empty path indicates success
+            'path_length': total_length,
+            'collisions': collisions,
+            'energy_used': energy_used
+        }
+
+    def check_collision(self, pos1: Tuple[float, float], pos2: Tuple[float, float],
+                       environment: dict) -> bool:
+        """Check for collision along path segment"""
+        # Check if path segment intersects with any obstacles
+        obstacles = environment.get('obstacles', [])
+
+        for obstacle in obstacles:
+            if self.segment_intersects_circle(pos1, pos2, obstacle['center'], obstacle['radius']):
                 return True
 
         return False
 
-    def recalculate_path(self, robot_state, goal, sensor_data):
-        """Recalculate path considering immediate obstacles"""
-        # Create temporary map with immediate obstacles
-        temp_map = self.create_temporary_map(robot_state, sensor_data)
+    def segment_intersects_circle(self, p1: Tuple[float, float], p2: Tuple[float, float],
+                                 center: Tuple[float, float], radius: float) -> bool:
+        """Check if line segment intersects with circle"""
+        p1 = np.array(p1)
+        p2 = np.array(p2)
+        center = np.array(center)
 
-        # Plan new path
-        new_path = self.base_planner.plan_path(temp_map, robot_state, goal)
+        # Vector from p1 to p2
+        d = p2 - p1
+        # Vector from p1 to circle center
+        f = p1 - center
 
-        if new_path:
-            self.current_path = new_path
-            self.path_index = 0
+        # Quadratic equation coefficients
+        a = np.dot(d, d)
+        b = 2 * np.dot(f, d)
+        c = np.dot(f, f) - radius * radius
 
-    def create_temporary_map(self, robot_state, sensor_data):
-        """Create temporary map with immediate obstacles"""
-        # This would typically work with a local map around the robot
-        # For simplicity, we'll just return the base map
-        # In practice, you'd modify the local area based on sensor readings
-        return self.base_planner.occupancy_grid
+        discriminant = b * b - 4 * a * c
 
-    def follow_path_with_adjustments(self, robot_state, sensor_data):
-        """Follow path with immediate reactive adjustments"""
-        if not self.current_path or self.path_index >= len(self.current_path):
-            return 0.0, 0.0  # Stop
+        if discriminant < 0:
+            # No intersection
+            return False
+        else:
+            # Check if intersection points are within the segment
+            sqrt_discriminant = np.sqrt(discriminant)
+            t1 = (-b - sqrt_discriminant) / (2 * a)
+            t2 = (-b + sqrt_discriminant) / (2 * a)
 
-        # Get next waypoint
-        target_waypoint = self.current_path[self.path_index]
+            # Check if either t1 or t2 is in [0, 1] (within segment)
+            return (0 <= t1 <= 1) or (0 <= t2 <= 1)
 
-        # Check if we've reached current waypoint
-        distance_to_waypoint = np.linalg.norm(
-            np.array(robot_state[:2]) - np.array(target_waypoint[:2])
-        )
+    def estimate_energy_cost(self, pos1: Tuple[float, float], pos2: Tuple[float, float]) -> float:
+        """Estimate energy cost of moving between two positions"""
+        # Simplified energy model - in reality this would consider:
+        # - Terrain type and roughness
+        # - Robot dynamics
+        # - Actuator efficiency
+        # - Payload
+        distance = np.linalg.norm(np.array(pos2) - np.array(pos1))
+        return distance * 0.1  # Placeholder energy cost
 
-        if distance_to_waypoint < 0.5:  # Waypoint reached
-            self.path_index += 1
-            if self.path_index >= len(self.current_path):
-                return 0.0, 0.0  # Reached goal
+    def aggregate_results(self, result: dict):
+        """Aggregate results from test case"""
+        self.metrics['success_rate'].append(result['success'])
+        self.metrics['time_to_completion'].append(result['execution_time'])
+        self.metrics['safety_violations'].append(result['collisions'])
 
-        # Calculate direction to next waypoint
-        direction = np.array(target_waypoint[:2]) - np.array(robot_state[:2])
-        distance = np.linalg.norm(direction)
-
-        # Reactive obstacle avoidance
-        avoidance_command = self.reactive_avoidance(sensor_data)
-
-        if avoidance_command is not None:
-            return avoidance_command
-
-        # Normal path following
-        linear_vel = min(0.5, distance)  # Scale with distance
-        angular_vel = np.arctan2(direction[1], direction[0]) - robot_state[2]
-        angular_vel = np.arctan2(np.sin(angular_vel), np.cos(angular_vel))  # Normalize
-
-        return linear_vel, angular_vel
-
-    def reactive_avoidance(self, sensor_data):
-        """Reactive obstacle avoidance based on sensor data"""
-        # Check for immediate collision risk
-        min_distance = min(sensor_data) if sensor_data else float('inf')
-
-        if min_distance < self.safety_margin:
-            # Emergency stop or avoidance maneuver
-            return 0.0, 0.5  # Rotate in place to avoid obstacle
-
-        # Check for frontal obstacles requiring speed reduction
-        front_sensors = sensor_data[len(sensor_data)//2-2:len(sensor_data)//2+2]
-        front_min = min(front_sensors) if front_sensors else float('inf')
-
-        if front_min < 2.0:  # Slow down when obstacles ahead
-            reduction_factor = front_min / 2.0
-            return 0.2 * reduction_factor, 0.0  # Reduced speed
-
-        return None  # No reactive action needed
+    def compute_summary_statistics(self) -> dict:
+        """Compute summary statistics from metrics"""
+        return {
+            'success_rate': np.mean(self.metrics['success_rate']) if self.metrics['success_rate'] else 0,
+            'avg_execution_time': np.mean(self.metrics['time_to_completion']) if self.metrics['time_to_completion'] else 0,
+            'avg_safety_violations': np.mean(self.metrics['safety_violations']) if self.metrics['safety_violations'] else 0,
+            'std_execution_time': np.std(self.metrics['time_to_completion']) if self.metrics['time_to_completion'] else 0
+        }
 ```
 
 ## Real-World Applications
 
-### Warehouse Robotics
+### Autonomous Navigation in Dynamic Environments
 
 ```python
-class WarehousePathPlanner:
-    """Path planning for warehouse robotics applications"""
+class DynamicEnvironmentNavigator:
+    """Navigation system for dynamic environments with moving obstacles"""
 
-    def __init__(self, warehouse_map, robot_specs):
-        self.warehouse_map = warehouse_map
-        self.robot_specs = robot_specs
-        self.traffic_manager = TrafficManager()
-        self.priority_scheduler = PriorityScheduler()
-
-    def plan_warehouse_path(self, start_location, end_location, priority=1):
-        """Plan path in warehouse environment with traffic considerations"""
-        # Get static path ignoring dynamic obstacles
-        static_path = self.plan_static_path(start_location, end_location)
-
-        if not static_path:
-            return None
-
-        # Schedule path with traffic manager
-        schedule = self.traffic_manager.schedule_path(
-            static_path,
-            self.robot_specs,
-            priority
-        )
-
-        if schedule.conflict_exists:
-            # Plan alternative path considering traffic
-            dynamic_path = self.plan_with_traffic(static_path, schedule)
-            return dynamic_path
-        else:
-            return static_path
-
-    def plan_static_path(self, start, goal):
-        """Plan basic path ignoring dynamic obstacles"""
-        # Use A* on warehouse grid map
-        grid_map = self.warehouse_map.get_static_map()
-        start_cell = self.warehouse_map.world_to_grid(start)
-        goal_cell = self.warehouse_map.world_to_grid(goal)
-
-        return self.global_planner.plan_path(grid_map, start_cell, goal_cell)
-
-    def plan_with_traffic(self, base_path, schedule):
-        """Plan path considering traffic schedule"""
-        # Adjust path to avoid scheduled traffic
-        adjusted_path = []
-        current_time = 0
-
-        for i, waypoint in enumerate(base_path):
-            # Check if waypoint is scheduled for traffic
-            conflict_time = self.traffic_manager.check_conflict(waypoint, current_time)
-
-            if conflict_time:
-                # Wait or take detour
-                if i > 0:
-                    # Try to find alternative route around conflict zone
-                    detour = self.find_detour(waypoint, base_path[i+1:], conflict_time)
-                    if detour:
-                        adjusted_path.extend(detour)
-                        current_time += self.estimate_travel_time(detour)
-                    else:
-                        # Wait for conflict to clear
-                        wait_time = conflict_time.duration
-                        current_time += wait_time
-                        adjusted_path.append(waypoint)
-                else:
-                    adjusted_path.append(waypoint)
-            else:
-                adjusted_path.append(waypoint)
-                current_time += self.estimate_move_time(waypoint,
-                                                      base_path[i+1] if i+1 < len(base_path) else waypoint)
-
-        return adjusted_path
-
-    def find_detour(self, conflict_waypoint, remaining_path, conflict_info):
-        """Find detour around conflict zone"""
-        # This would implement detour planning around busy areas
-        # For now, return the original path segment
-        return [conflict_waypoint]  # Placeholder
-
-    def estimate_move_time(self, start_waypoint, end_waypoint):
-        """Estimate travel time between waypoints"""
-        distance = np.linalg.norm(np.array(end_waypoint) - np.array(start_waypoint))
-        return distance / self.robot_specs.max_speed
-```
-
-### Autonomous Navigation
-
-```python
-class AutonomousNavigationSystem:
-    """Complete autonomous navigation system"""
-
-    def __init__(self, global_planner, local_planner, controller,
-                 perception_system, map_manager):
-        self.global_planner = global_planner
+    def __init__(self, prediction_model, local_planner, global_planner):
+        self.prediction_model = prediction_model
         self.local_planner = local_planner
-        self.controller = controller
-        self.perception = perception_system
-        self.map_manager = map_manager
+        self.global_planner = global_planner
+        self.moving_obstacles = {}  # Track moving obstacles
+        self.prediction_horizon = 5.0  # seconds
 
-        self.current_goal = None
-        self.current_path = []
-        self.navigation_state = 'IDLE'  # IDLE, PLANNING, EXECUTING, RECOVERY
+    def navigate_dynamic(self, robot_state: RobotState, goal: Tuple[float, float],
+                        sensor_data: dict) -> Tuple[float, float]:
+        """
+        Navigate in environment with dynamic obstacles
+        Uses prediction to anticipate obstacle movements
+        """
+        # Update moving obstacle predictions
+        self.update_moving_obstacles(sensor_data)
 
-    def navigate_to_goal(self, goal):
-        """Navigate to specified goal"""
-        self.current_goal = goal
-        self.navigation_state = 'PLANNING'
+        # Predict future obstacle positions
+        future_obstacles = self.predict_moving_obstacles(self.prediction_horizon)
 
-        # Plan global path
-        self.current_path = self.global_planner.plan_path(
-            self.map_manager.get_current_map(),
-            self.get_robot_position(),
-            goal
+        # Plan local trajectory considering predicted obstacles
+        local_command = self.local_planner.plan_with_predictions(
+            robot_state, goal, future_obstacles
         )
 
-        if not self.current_path:
-            self.navigation_state = 'RECOVERY'
-            return False
+        return local_command
 
-        self.navigation_state = 'EXECUTING'
-        return True
+    def update_moving_obstacles(self, sensor_data: dict):
+        """Update tracking of moving obstacles"""
+        current_obstacles = sensor_data.get('dynamic_obstacles', [])
 
-    def execute_navigation_step(self, robot_state, sensor_data):
-        """Execute one step of navigation"""
-        if self.navigation_state == 'IDLE':
-            return 0.0, 0.0
+        for obs in current_obstacles:
+            obs_id = obs['id']
 
-        elif self.navigation_state == 'PLANNING':
-            success = self.navigate_to_goal(self.current_goal)
-            if not success:
-                self.navigation_state = 'RECOVERY'
-                return 0.0, 0.0
+            if obs_id not in self.moving_obstacles:
+                # New obstacle - initialize tracker
+                self.moving_obstacles[obs_id] = {
+                    'positions': [obs['position']],
+                    'velocities': [obs['velocity']],
+                    'last_seen': time.time()
+                }
+            else:
+                # Update existing obstacle
+                tracker = self.moving_obstacles[obs_id]
+                tracker['positions'].append(obs['position'])
+                tracker['velocities'].append(obs['velocity'])
+                tracker['last_seen'] = time.time()
 
-        elif self.navigation_state == 'EXECUTING':
-            # Update map with new sensor data
-            self.map_manager.update_map(sensor_data, robot_state)
+                # Keep only recent history (e.g., last 10 positions)
+                if len(tracker['positions']) > 10:
+                    tracker['positions'] = tracker['positions'][-10:]
+                    tracker['velocities'] = tracker['velocities'][-10:]
 
-            # Plan local trajectory considering immediate obstacles
-            local_command = self.local_planner.plan_local_path(
-                robot_state,
-                self.get_next_waypoint(),
-                self.perception.process_sensor_data(sensor_data)
-            )
+    def predict_moving_obstacles(self, horizon: float) -> List[dict]:
+        """Predict positions of moving obstacles over time horizon"""
+        predictions = []
+        current_time = time.time()
 
-            # Check if we've reached the goal
-            if self.has_reached_goal(robot_state):
-                self.navigation_state = 'IDLE'
-                return 0.0, 0.0
+        for obs_id, tracker in self.moving_obstacles.items():
+            if current_time - tracker['last_seen'] > 2.0:  # Ignore if not seen recently
+                continue
 
-            # Check if path needs replanning
-            if self.path_is_blocked(sensor_data):
-                self.navigation_state = 'PLANNING'
+            # Predict future positions using velocity model
+            for t in np.arange(0, horizon, 0.5):  # Predict every 0.5 seconds
+                if len(tracker['velocities']) >= 2:
+                    # Use last known velocity for prediction
+                    velocity = tracker['velocities'][-1]
+                    predicted_pos = (
+                        tracker['positions'][-1][0] + velocity[0] * t,
+                        tracker['positions'][-1][1] + velocity[1] * t
+                    )
+                else:
+                    # If not enough history, assume stationary
+                    predicted_pos = tracker['positions'][-1]
 
-            return local_command
+                predictions.append({
+                    'id': obs_id,
+                    'position': predicted_pos,
+                    'time': current_time + t,
+                    'type': 'predicted'
+                })
 
-        elif self.navigation_state == 'RECOVERY':
-            # Emergency recovery behavior
-            return self.execute_recovery_behavior(robot_state)
+        return predictions
 
-        return 0.0, 0.0
-
-    def get_next_waypoint(self):
-        """Get next waypoint in current path"""
-        # This would typically track progress along the path
-        # and return the next significant waypoint
-        if self.current_path:
-            return self.current_path[-1]  # Simplified
-        return self.current_goal
-
-    def has_reached_goal(self, robot_state):
-        """Check if robot has reached goal"""
-        if not self.current_goal:
+    def replan_if_needed(self, robot_state: RobotState, current_path: List[Tuple[float, float]],
+                        sensor_data: dict) -> bool:
+        """Determine if replanning is needed due to dynamic obstacles"""
+        if not current_path:
             return True
 
-        distance = np.linalg.norm(
-            np.array(robot_state[:2]) - np.array(self.current_goal[:2])
+        # Check if any predicted obstacles will intersect with current path
+        future_obstacles = self.predict_moving_obstacles(2.0)  # Check 2 seconds ahead
+        current_pos = robot_state[:2]
+
+        # Find closest path segment to robot
+        closest_idx = self.find_closest_path_segment(current_pos, current_path)
+
+        # Check path segments ahead for potential collisions
+        for i in range(closest_idx, min(closest_idx + 10, len(current_path))):  # Look ahead 10 segments
+            path_segment = (current_path[i-1] if i > 0 else current_pos, current_path[i])
+
+            for obs in future_obstacles:
+                if self.segment_intersects_circle(
+                    path_segment[0], path_segment[1],
+                    obs['position'], 0.5  # 0.5m safety radius
+                ):
+                    return True  # Need to replan
+
+        return False
+
+    def find_closest_path_segment(self, pos: Tuple[float, float],
+                                 path: List[Tuple[float, float]]) -> int:
+        """Find index of closest path segment to current position"""
+        min_dist = float('inf')
+        closest_idx = 0
+
+        for i in range(1, len(path)):
+            seg_start, seg_end = path[i-1], path[i]
+            dist = self.point_to_segment_distance(pos, seg_start, seg_end)
+
+            if dist < min_dist:
+                min_dist = dist
+                closest_idx = i
+
+        return closest_idx
+
+    def point_to_segment_distance(self, point: Tuple[float, float],
+                                 seg_start: Tuple[float, float],
+                                 seg_end: Tuple[float, float]) -> float:
+        """Calculate distance from point to line segment"""
+        point = np.array(point)
+        seg_start = np.array(seg_start)
+        seg_end = np.array(seg_end)
+
+        # Vector from segment start to point
+        ap = point - seg_start
+        # Vector from segment start to end
+        ab = seg_end - seg_start
+
+        # Project point onto line
+        ab_sq = np.dot(ab, ab)
+        if ab_sq == 0:
+            # Segment is actually a point
+            return np.linalg.norm(ap)
+
+        t = max(0, min(1, np.dot(ap, ab) / ab_sq))
+        projection = seg_start + t * ab
+
+        return np.linalg.norm(point - projection)
+```
+
+### Multi-Modal Navigation
+
+```python
+class MultiModalNavigator:
+    """Navigation system that can use multiple modes of locomotion"""
+
+    def __init__(self, available_modes=['walking', 'driving', 'flying']):
+        self.available_modes = available_modes
+        self.current_mode = 'walking'
+        self.mode_transitions = self.define_mode_transitions()
+        self.planners = self.initialize_planners()
+
+    def define_mode_transitions(self) -> dict:
+        """Define possible transitions between navigation modes"""
+        return {
+            'walking': ['driving', 'flying'],
+            'driving': ['walking', 'flying'],
+            'flying': ['walking', 'driving']
+        }
+
+    def initialize_planners(self) -> dict:
+        """Initialize planners for each navigation mode"""
+        planners = {}
+
+        for mode in self.available_modes:
+            if mode == 'walking':
+                planners[mode] = AStarPlanner()  # Ground-based planning
+            elif mode == 'driving':
+                planners[mode] = AStarPlanner()  # Ground-based planning with vehicle constraints
+            elif mode == 'flying':
+                planners[mode] = RRTStarPlanner(
+                    workspace_bounds=[(-50, 50), (-50, 50), (0, 20)],  # 3D for flying
+                    robot_radius=0.3,
+                    step_size=1.0
+                )
+
+        return planners
+
+    def plan_multi_modal_path(self, start: Tuple[float, float], goal: Tuple[float, float],
+                             environment: dict) -> Optional[List[dict]]:
+        """
+        Plan path that may use multiple navigation modes
+        Returns list of segments with mode and path for each segment
+        """
+        # Analyze environment to determine optimal mode transitions
+        terrain_analysis = self.analyze_terrain(start, goal, environment)
+
+        # Plan path for each mode
+        mode_paths = {}
+        for mode in self.available_modes:
+            if self.is_mode_applicable(mode, terrain_analysis):
+                planner = self.planners[mode]
+                path = self.plan_for_mode(mode, start, goal, environment)
+                if path:
+                    mode_paths[mode] = {
+                        'path': path,
+                        'cost': self.evaluate_path_cost(path, mode, environment)
+                    }
+
+        # Find optimal sequence of mode transitions
+        optimal_sequence = self.find_optimal_mode_sequence(mode_paths, start, goal)
+
+        # Generate complete path with mode transitions
+        complete_path = self.generate_complete_path(optimal_sequence)
+
+        return complete_path
+
+    def analyze_terrain(self, start: Tuple[float, float], goal: Tuple[float, float],
+                       environment: dict) -> dict:
+        """Analyze terrain between start and goal"""
+        terrain_analysis = {
+            'obstacles': self.identify_obstacles(start, goal, environment),
+            'terrain_types': self.identify_terrain_types(start, goal, environment),
+            'elevation_changes': self.calculate_elevation_changes(start, goal, environment),
+            'accessibility': self.calculate_accessibility(start, goal, environment)
+        }
+        return terrain_analysis
+
+    def is_mode_applicable(self, mode: str, terrain_analysis: dict) -> bool:
+        """Check if navigation mode is applicable given terrain"""
+        if mode == 'walking':
+            return terrain_analysis['accessibility']['walking'] > 0.5
+        elif mode == 'driving':
+            return (terrain_analysis['accessibility']['driving'] > 0.5 and
+                   terrain_analysis['elevation_changes']['max_slope'] < 0.3)
+        elif mode == 'flying':
+            return True  # Flying is generally always possible but may be restricted by regulations
+        return False
+
+    def plan_for_mode(self, mode: str, start: Tuple[float, float],
+                     goal: Tuple[float, float], environment: dict) -> Optional[List[Tuple[float, float]]]:
+        """Plan path for specific navigation mode"""
+        planner = self.planners[mode]
+
+        if mode == 'flying':
+            # For flying, we need 3D planning
+            # Convert 2D start/goal to 3D with default height
+            start_3d = (start[0], start[1], 5.0)  # Default flying height
+            goal_3d = (goal[0], goal[1], 5.0)
+            return planner.plan_path(start_3d, goal_3d, environment)
+        else:
+            # For ground-based modes, use 2D planning
+            return planner.plan_path(start, goal, environment)
+
+    def evaluate_path_cost(self, path: List[Tuple[float, float]], mode: str,
+                          environment: dict) -> float:
+        """Evaluate cost of path considering mode-specific factors"""
+        if not path:
+            return float('inf')
+
+        # Base cost: path length
+        length_cost = sum(
+            np.linalg.norm(np.array(path[i+1]) - np.array(path[i]))
+            for i in range(len(path)-1)
         )
-        return distance < 0.5  # Within 0.5m of goal
 
-    def path_is_blocked(self, sensor_data):
-        """Check if current path is blocked"""
-        # Check if there are immediate obstacles on the path
-        return min(sensor_data) < 0.5 if sensor_data else False
+        # Mode-specific cost factors
+        mode_cost = 0
+        if mode == 'walking':
+            # Walking might have terrain difficulty costs
+            mode_cost += self.calculate_terrain_difficulty(path, environment)
+        elif mode == 'driving':
+            # Driving might have fuel/time costs
+            mode_cost += length_cost * 0.1  # Fuel cost per unit distance
+        elif mode == 'flying':
+            # Flying has energy costs based on altitude changes
+            mode_cost += self.calculate_altitude_cost(path)
 
-    def execute_recovery_behavior(self, robot_state):
-        """Execute recovery behavior when navigation fails"""
-        # Rotate in place to clear any immediate obstacles
-        return 0.0, 0.5  # Slow rotation
+        # Transition costs
+        transition_cost = 0  # Would be calculated based on current mode
 
-    def get_robot_position(self):
-        """Get current robot position"""
-        # This would interface with localization system
-        return (0, 0, 0)  # Placeholder
+        return length_cost + mode_cost + transition_cost
+
+    def find_optimal_mode_sequence(self, mode_paths: dict, start: Tuple[float, float],
+                                  goal: Tuple[float, float]) -> List[dict]:
+        """Find optimal sequence of modes and paths"""
+        # This would implement a complex optimization algorithm
+        # For now, return a simple heuristic solution
+
+        if not mode_paths:
+            return []
+
+        # Find the mode with the lowest cost path
+        best_mode = min(mode_paths.keys(), key=lambda m: mode_paths[m]['cost'])
+        best_path = mode_paths[best_mode]['path']
+
+        return [{
+            'mode': best_mode,
+            'path': best_path,
+            'cost': mode_paths[best_mode]['cost']
+        }]
+
+    def generate_complete_path(self, sequence: List[dict]) -> List[dict]:
+        """Generate complete path with mode and position for each segment"""
+        complete_path = []
+
+        for segment in sequence:
+            for pos in segment['path']:
+                complete_path.append({
+                    'position': pos,
+                    'mode': segment['mode'],
+                    'segment_cost': segment['cost'] / len(segment['path'])  # Cost per waypoint
+                })
+
+        return complete_path
 ```
 
 ## Challenges and Future Directions
 
-### Current Challenges
+### Key Challenges
 
-#### Computational Complexity
-- Real-time requirements vs. optimal planning
-- Memory constraints on embedded systems
-- Scalability to large environments
-- Multi-robot coordination complexity
-
-#### Uncertainty Handling
-- Sensor noise and uncertainty
-- Dynamic environment changes
-- Model inaccuracies
-- Partial observability
-
-#### Safety and Reliability
-- Collision avoidance guarantees
-- Fail-safe behaviors
-- Verification and validation
-- Human-robot interaction safety
+1. **Real-time Performance**: Planning algorithms must operate within strict time constraints
+2. **Uncertainty Management**: Dealing with uncertain sensor data and dynamic environments
+3. **Multi-Objective Optimization**: Balancing competing objectives (safety, efficiency, energy)
+4. **Scalability**: Scaling to large environments and multiple agents
+5. **Safety Verification**: Ensuring safety guarantees in complex environments
+6. **Learning and Adaptation**: Adapting to new environments and tasks
 
 ### Future Directions
 
-#### Learning-Based Planning
-- Deep reinforcement learning for navigation
-- Imitation learning from expert demonstrations
-- Meta-learning for rapid adaptation
-- Learning from human corrections
-
-#### Multi-Modal Planning
-- Integration of vision, touch, and other modalities
-- Cross-modal learning and adaptation
-- Semantic-aware planning
-- Natural language navigation
-
-#### Swarm Intelligence
-- Collective planning for robot swarms
-- Distributed decision making
-- Emergent coordination behaviors
-- Self-organizing navigation systems
+1. **Neuromorphic Navigation**: Brain-inspired navigation algorithms
+2. **Quantum Pathfinding**: Quantum algorithms for optimization
+3. **Swarm Intelligence**: Collective navigation strategies
+4. **Bio-Inspired Approaches**: Nature-based navigation strategies
+5. **Predictive Navigation**: Anticipatory planning based on environment prediction
+6. **Continual Learning**: Lifelong navigation skill improvement
 
 ## Summary
 
-Planning and navigation in Physical AI systems require sophisticated algorithms that account for real-world constraints including dynamics, uncertainty, and safety. The field encompasses classical approaches like A* and Dijkstra's algorithm, sampling-based methods like RRT*, and reactive systems for real-time obstacle avoidance. Modern approaches increasingly incorporate learning and adaptation capabilities to handle dynamic environments and improve performance over time. Success in physical navigation requires tight integration between perception, mapping, planning, and control systems, with each component designed to work robustly in the presence of real-world uncertainties and constraints.
+Planning and navigation in Physical AI systems require sophisticated algorithms that can handle the complexities of real-world environments. This chapter covered classical algorithms like A* and Dijkstra's, sampling-based methods like RRT*, local planning approaches like DWA and VFH, and advanced techniques for handling uncertainty, multiple agents, and dynamic environments. The key to successful navigation in physical systems is the integration of multiple planning levels—from global pathfinding to local obstacle avoidance—while considering the constraints and capabilities of the physical platform. As Physical AI continues to advance, planning algorithms will need to become more adaptive, efficient, and capable of handling the increasing complexity of real-world robotic applications.
 
 ## Key Takeaways
 
-- Physical navigation requires real-time planning with safety and efficiency constraints
-- Classical algorithms like A* provide optimal solutions in discrete spaces
-- Sampling-based methods like RRT* are effective for high-dimensional continuous spaces
-- Local planning methods like DWA enable real-time obstacle avoidance
-- Integration with perception and control is essential for robust navigation
-- Multi-layered architectures combine global and local planning effectively
-- Real-world applications require handling of dynamic obstacles and traffic
-- Learning-based approaches offer promising directions for adaptation
+- Physical navigation requires algorithms that account for real-time constraints and environmental uncertainties
+- Different communication patterns (topics, services, actions, parameters) serve specific purposes in navigation
+- Hierarchical planning improves efficiency for large-scale environments
+- Safety verification is crucial for physical system deployment
+- Multi-modal navigation enables robots to adapt to diverse environments
+- Real-time obstacle avoidance requires efficient local planning algorithms
+- Integration with perception and SLAM enables navigation in unknown environments
+- Performance evaluation must consider both computational and physical metrics
+- Dynamic environment navigation requires predictive models and reactive planning
 
 ## References and Further Reading
 
@@ -1924,7 +3439,7 @@ Planning and navigation in Physical AI systems require sophisticated algorithms 
 2. "Principles of Robot Motion" - Choset et al.
 3. "Robot Motion Planning" - Latombe
 4. "Probabilistic Robotics" - Thrun, Burgard & Fox
-5. "Path Planning in Non-static Environments" - Recent research papers
-6. "Sampling-based Motion Planning: A Survey" - Comprehensive survey paper
-7. "Deep Reinforcement Learning for Robot Navigation" - Latest research
-8. "SLAM and Navigation Integration" - Specialized literature
+5. "Handbook of Robotics" - Siciliano & Khatib
+6. "Multi-Robot Systems: From Swarms to Intelligent Automata" - Parker et al.
+7. "Path Planning in Robotics" - Recent developments and challenges
+8. "A Survey of Motion Planning and Control Techniques for Robot Navigation" - Technical survey

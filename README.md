@@ -1,65 +1,138 @@
-# Website
+<div align="center">
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+# 🤖📚 **Physical-AI Humanoid Robotics TextBook**  
+### *Spec-Driven × AI-Native × Robotics Engineering*
 
-## Installation
+<img src="./static/logo.png" alt="Physical AI Logo" height="140" />
+
+---
+
+### **A Modern Open-Source TextBook for Building Physical-AI & Humanoid Robotics Systems**
+
+[![GitHub Stars](https://img.shields.io/github/stars/HamzaSheikh768/Physical-AI-Humanoid-Robotics-TextBook?style=for-the-badge)]()
+[![GitHub Forks](https://img.shields.io/github/forks/HamzaSheikh768/Physical-AI-Humanoid-Robotics-TextBook?style=for-the-badge)]()
+[![GitHub Issues](https://img.shields.io/github/issues/HamzaSheikh768/Physical-AI-Humanoid-Robotics-TextBook?style=for-the-badge)]()
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/HamzaSheikh768/Physical-AI-Humanoid-Robotics-TextBook?style=for-the-badge)]()
+
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)]()
+[![Made With ❤️](https://img.shields.io/badge/Made%20With-%E2%9D%A4-red?style=for-the-badge)]()
+
+</div>
+
+---
+
+## 📖 Overview
+
+**Physical-AI Humanoid Robotics TextBook** is a fully-documented, modular, and AI-native robotics reference designed to help developers, researchers, and students build humanoid robots, simulations, AI-driven control systems, and more.
+
+This project brings together:
+
+- 🤖 Humanoid Robotics  
+- 🧠 AI-Native Design & Planning  
+- 🛠️ Modular Engineering & Spec-Driven Development  
+- 🧪 Simulation-First Robotics Architecture  
+- 📚 Full TextBook-Level Documentation  
+
+---
+
+## 🧭 Table of Contents
+- ⭐ Features  
+- 📁 Repository Structure  
+- 🚀 Quick Start  
+- 🎯 Usage  
+- 🗺️ Roadmap  
+- 🧩 Tech Stack  
+- 🤝 Contributing  
+- 🧑‍💻 Author  
+- ⭐ Support Project  
+
+---
+
+## ⭐ Features
+
+- ✔️ **Spec-Driven Architecture**  
+- ✔️ **Simulation + Real Hardware Ready Design**  
+- ✔️ **AI-Native Robotics Workflows**  
+- ✔️ **Clear Documentation, Diagrams, & TextBook Flow**  
+- ✔️ **Extendable Modules for Robotics, AI, Vision, Control**  
+- ✔️ **Community Contribution Friendly**  
+
+---
+
+## 📁 Repository Structure
+
+/specs → Feature specs, system architecture, design documents
+/src → Robotics, AI, control, planning, simulation source code
+/docs → TextBook chapters, theory, tutorials, deep explanations
+/static → Diagrams, illustrations, models, media
+/.github/workflows → CI/CD pipelines (optional)
+README.md → Project overview
+LICENSE → License info
+
+yaml
+Copy code
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-yarn
-```
+git clone https://github.com/HamzaSheikh768/Physical-AI-Humanoid-Robotics-TextBook.git
+cd Physical-AI-Humanoid-Robotics-TextBook
 
-## Local Development
+npm install  # or pip install -r requirements.txt
+Run:
 
-```bash
-yarn start
-```
+bash
+Copy code
+npm start          # or python main.py
+Build:
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
+bash
+Copy code
+npm run build
+🎯 Usage
+Run humanoid robot simulation
 
-## Build
+Load AI planners & reasoning modules
 
-```bash
-yarn build
-```
+Explore textbook chapters for robotics fundamentals
 
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
+Follow engineering specs → implement → test in simulation
 
-## Deployment
+Extend modules for vision, locomotion, motion planning, control
 
-Using SSH:
+🧩 Tech Stack
+Category	Technologies
+Languages	Python, TypeScript, C++
+AI/ML	OpenAI, Transformers, Custom Models
+Robotics	ROS / Custom Simulation Modules
+Simulation	Physics Engines, 3D Models
+Docs	Markdown, Docusaurus, Custom Illustrations
 
-```bash
-USE_SSH=true yarn deploy
-```
+🗺️ Roadmap
+ Add complete textbook chapters
 
-Not using SSH:
+ Add humanoid locomotion planners
 
-```bash
-GIT_USER=<Your GitHub username> yarn deploy
-```
+ Add ROS bridges
 
-If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+ Add 3D models in /static
 
-## Spec Management
+ Add video tutorials
 
-### Mark Spec as Complete
+ Add real-robot deployment flow
 
-To mark a feature specification file as 'Complete', use the `mark-spec-complete.js` script:
+🤝 Contributing
+Pull requests are welcome!
+Follow the contribution guide:
 
-```bash
-node .specify/scripts/mark-spec-complete.js specs/<feature-name>/spec.md
-```
+Fork → Branch → Commit
 
-Replace `<feature-name>` with the actual directory name of your feature. For example:
+Follow spec-driven approach
 
-```bash
-node .specify/scripts/mark-spec-complete.js specs/1-spec-read-completion/spec.md
-```
+Submit PR with clear explanation
 
-This will update the 'Status' field in the specified `spec.md` file to 'Complete'.
-
-### Generate Consolidated Spec Report
-
-A consolidated summary report of all `spec.md` files, including their paths, extracted status, and identified clarifications, was generated and displayed directly in the conversation. You can view the full report by reviewing the conversation history.
-
-
+🧑‍💻 Author
+👤 Hamza Sheikh
+GitHub: https://github.com/HamzaSheikh768

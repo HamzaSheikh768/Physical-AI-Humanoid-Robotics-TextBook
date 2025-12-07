@@ -1,3 +1,0 @@
-# Vision-Language-Action (VLA)
-
-This module focuses on the integration of vision, language, and action to enable human-robot interaction through natural language. You will learn how to convert natural language commands to robot actions using speech recognition (OpenAI Whisper) and implement cognitive planning with large language models (LLMs). The module culminates in a capstone project for a fully autonomous humanoid robot.

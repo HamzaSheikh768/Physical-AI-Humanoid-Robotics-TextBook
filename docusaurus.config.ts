@@ -5,7 +5,7 @@ import type * as Preset from "@docusaurus/preset-classic";
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: "Physical AI & Humanoid Robotics Textbook",
+  title: "Physical AI & Humanoid Robotics",
   tagline:
     "Building Embodied Intelligence with ROS 2, NVIDIA Isaac, and Vision-Language-Action",
   favicon: "img/favicon.ico",
@@ -19,7 +19,7 @@ const config: Config = {
   url: "https://anthropic.github.io",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: "/physical-ai-humanoid-robotics-textbook/",
+  baseUrl: "/physical-ai-humanoid-robotics-textbook/", 
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
@@ -176,15 +176,6 @@ const config: Config = {
             {
               label: "Blog",
               to: "/blog",
-            },
-          ],
-        },
-        {
-          title: "Legal",
-          items: [
-            {
-              label: "Privacy Policy",
-              to: "/privacy-policy",
             },
           ],
         },

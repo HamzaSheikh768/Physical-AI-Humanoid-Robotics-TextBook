@@ -1,0 +1,1635 @@
+---
+title: "Sensor Fusion for Physical AI – Combining Multiple Sensory Inputs"
+description: "Comprehensive exploration of sensor fusion techniques for Physical AI systems, covering Kalman filters, particle filters, and modern approaches to integrating multiple sensor modalities."
+tags: ["sensor-fusion", "physical-ai", "kalman-filter", "particle-filter", "multi-sensor"]
+sidebar_label: "Chapter 2: Sensor Fusion for Physical AI"
+slug: "/modules/module3/chapter2"
+keywords: ["Sensor Fusion", "Physical AI", "Kalman Filter", "Particle Filter", "Multi-Sensor Integration"]
+---
+
+# Sensor Fusion for Physical AI – Combining Multiple Sensory Inputs
+
+## Learning Objectives
+
+By the end of this chapter, you will be able to:
+- Understand the fundamental principles of sensor fusion in Physical AI systems
+- Implement Kalman filter variants for state estimation and tracking
+- Apply particle filters for non-linear and non-Gaussian problems
+- Design multi-sensor integration architectures for robotic applications
+- Evaluate sensor fusion algorithms based on computational requirements and accuracy
+- Analyze the impact of sensor fusion on system robustness and reliability
+
+## Introduction
+
+Sensor fusion is a cornerstone of Physical AI, enabling robots to overcome the limitations of individual sensors by combining information from multiple modalities. In the physical world, no single sensor can provide complete, accurate, and reliable information about the environment. Each sensor has its strengths and weaknesses, and by intelligently combining their outputs, Physical AI systems can achieve robust perception that surpasses the capabilities of any individual sensor.
+
+This chapter explores the theoretical foundations and practical implementations of sensor fusion, from classical approaches like Kalman filters to modern machine learning techniques. We'll examine how different fusion strategies address the unique challenges of physical systems, including real-time constraints, computational limitations, and the need for safety-critical operation.
+
+## Fundamentals of Sensor Fusion
+
+### Why Sensor Fusion is Critical in Physical AI
+
+Physical AI systems face inherent limitations with single sensors:
+
+- **Limited Field of View**: Cameras and LiDAR have restricted coverage
+- **Environmental Sensitivity**: Performance degrades in adverse conditions
+- **Physical Constraints**: Each sensor has specific limitations
+- **Temporal Delays**: Different sensors may have varying update rates
+- **Noise and Uncertainty**: Individual sensors provide noisy measurements
+
+Sensor fusion addresses these limitations by:
+
+- **Redundancy**: Multiple sensors provide backup when one fails
+- **Complementarity**: Different sensors capture different aspects of the environment
+- **Robustness**: Combined information is more reliable than individual sensors
+- **Accuracy**: Statistical combination can improve precision
+- **Coverage**: Multiple sensors provide broader environmental awareness
+
+### Sensor Characteristics and Limitations
+
+#### Camera Systems
+- **Strengths**: Rich visual information, texture, color, high resolution
+- **Weaknesses**: Performance degraded by lighting, weather, occlusions
+- **Applications**: Object recognition, scene understanding, visual odometry
+- **Typical Uncertainty**: Pixel-level noise, geometric distortion, motion blur
+
+#### LiDAR Systems
+- **Strengths**: Precise distance measurements, geometric accuracy, daylight invariant
+- **Weaknesses**: Expensive, limited resolution, affected by reflective surfaces
+- **Applications**: 3D mapping, obstacle detection, localization
+- **Typical Uncertainty**: Distance measurement noise, beam divergence
+
+#### Radar Systems
+- **Strengths**: All-weather operation, long range, velocity measurement
+- **Weaknesses**: Lower resolution, difficulty with static objects
+- **Applications**: Long-range detection, velocity estimation, adverse weather
+- **Typical Uncertainty**: Azimuth and range resolution, multipath effects
+
+#### Inertial Measurement Units (IMU)
+- **Strengths**: High-frequency measurements, self-contained, no external references
+- **Weaknesses**: Drift over time, bias accumulation, noise accumulation
+- **Applications**: Attitude estimation, motion detection, dead reckoning
+- **Typical Uncertainty**: Bias drift, thermal effects, scale factor errors
+
+#### GPS/GNSS
+- **Strengths**: Absolute positioning, global coverage, high accuracy in open sky
+- **Weaknesses**: Signal blockage, multipath, limited update rate
+- **Applications**: Global positioning, navigation, outdoor localization
+- **Typical Uncertainty**: Multipath, atmospheric delays, satellite geometry
+
+### Mathematical Foundations
+
+#### Probability Theory for Sensor Fusion
+
+Sensor fusion relies heavily on probability theory to combine uncertain measurements:
+
+```python
+import numpy as np
+from scipy.stats import multivariate_normal
+
+class ProbabilisticSensorFusion:
+    """Basic framework for probabilistic sensor fusion"""
+
+    def __init__(self, state_dim):
+        self.state_dim = state_dim
+        self.mean = np.zeros(state_dim)
+        self.covariance = np.eye(state_dim)
+
+    def gaussian_product(self, mean1, cov1, mean2, cov2):
+        """
+        Compute product of two Gaussian distributions
+        Result is proportional to a Gaussian with updated mean and covariance
+        """
+        # Covariance of product: Σ = (Σ₁⁻¹ + Σ₂⁻¹)⁻¹
+        cov_inv1 = np.linalg.inv(cov1)
+        cov_inv2 = np.linalg.inv(cov2)
+        new_cov = np.linalg.inv(cov_inv1 + cov_inv2)
+
+        # Mean of product: μ = Σ(Σ₁⁻¹μ₁ + Σ₂⁻¹μ₂)
+        mean_term1 = cov_inv1 @ mean1
+        mean_term2 = cov_inv2 @ mean2
+        new_mean = new_cov @ (mean_term1 + mean_term2)
+
+        return new_mean, new_cov
+
+    def update_with_measurement(self, measurement, sensor_covariance, sensor_jacobian=None):
+        """
+        Update state estimate with new measurement
+        Uses standard Kalman filter equations if jacobian provided
+        Otherwise treats as direct state measurement
+        """
+        if sensor_jacobian is not None:
+            # Kalman filter update
+            innovation = measurement - sensor_jacobian @ self.mean
+            innovation_cov = sensor_jacobian @ self.covariance @ sensor_jacobian.T + sensor_covariance
+            kalman_gain = self.covariance @ sensor_jacobian.T @ np.linalg.inv(innovation_cov)
+
+            # Update state and covariance
+            self.mean = self.mean + kalman_gain @ innovation
+            self.covariance = self.covariance - kalman_gain @ sensor_jacobian @ self.covariance
+        else:
+            # Direct fusion assuming measurement is full state
+            meas_mean = measurement
+            new_mean, new_cov = self.gaussian_product(
+                self.mean, self.covariance,
+                meas_mean, sensor_covariance
+            )
+            self.mean = new_mean
+            self.covariance = new_cov
+
+# Example usage
+fusion = ProbabilisticSensorFusion(state_dim=3)  # x, y, theta
+
+# Initial estimate (uncertain)
+fusion.mean = np.array([0.0, 0.0, 0.0])
+fusion.covariance = np.diag([1.0, 1.0, 0.1])  # High uncertainty
+
+# Measurement from GPS (more certain in position, no orientation)
+gps_meas = np.array([10.2, 5.1, 0.05])  # [x, y, irrelevant]
+gps_cov = np.diag([0.5, 0.5, 100.0])  # GPS knows position well, orientation irrelevant
+
+fusion.update_with_measurement(gps_meas, gps_cov)
+
+print(f"Updated estimate: {fusion.mean}")
+print(f"Updated uncertainty: {np.sqrt(np.diag(fusion.covariance))}")
+```
+
+#### Bayesian Framework
+
+The Bayesian approach provides the theoretical foundation for sensor fusion:
+
+```
+P(state|measurements) ∝ P(measurements|state) × P(state)
+```
+
+Where:
+- `P(state|measurements)` is the posterior (updated belief)
+- `P(measurements|state)` is the likelihood (sensor model)
+- `P(state)` is the prior (previous belief)
+
+## Classical Sensor Fusion Techniques
+
+### Kalman Filter Family
+
+#### Linear Kalman Filter
+
+The Linear Kalman Filter is the foundation for many sensor fusion applications:
+
+```python
+class LinearKalmanFilter:
+    def __init__(self, state_dim, measurement_dim):
+        self.state_dim = state_dim
+        self.measurement_dim = measurement_dim
+
+        # State vector: [x, y, vx, vy] (position and velocity)
+        self.state = np.zeros(state_dim)
+        self.covariance = np.eye(state_dim) * 1000  # Initial uncertainty
+
+        # Process and measurement noise
+        self.Q = np.eye(state_dim) * 0.1  # Process noise
+        self.R = np.eye(measurement_dim) * 1.0  # Measurement noise
+
+        # State transition model (constant velocity model)
+        self.F = np.eye(state_dim)
+        dt = 0.1  # Time step
+        self.F[0, 2] = dt  # x += vx * dt
+        self.F[1, 3] = dt  # y += vy * dt
+
+        # Measurement model (observe position only)
+        self.H = np.zeros((measurement_dim, state_dim))
+        self.H[0, 0] = 1.0  # Measure x
+        self.H[1, 1] = 1.0  # Measure y
+
+    def predict(self):
+        """Prediction step: x̂ = F*x + B*u, P = F*P*F^T + Q"""
+        self.state = self.F @ self.state
+        self.covariance = self.F @ self.covariance @ self.F.T + self.Q
+
+    def update(self, measurement):
+        """Update step with new measurement"""
+        # Innovation
+        innovation = measurement - self.H @ self.state
+        innovation_cov = self.H @ self.covariance @ self.H.T + self.R
+
+        # Kalman gain
+        kalman_gain = self.covariance @ self.H.T @ np.linalg.inv(innovation_cov)
+
+        # Update state and covariance
+        self.state = self.state + kalman_gain @ innovation
+        self.covariance = (np.eye(self.state_dim) - kalman_gain @ self.H) @ self.covariance
+
+# Example usage
+kf = LinearKalmanFilter(state_dim=4, measurement_dim=2)  # [x, y, vx, vy] → [x, y]
+
+# Simulate measurements with noise
+np.random.seed(42)
+true_positions = [(i*0.5, i*0.3) for i in range(10)]
+noisy_measurements = [(x + np.random.normal(0, 0.5), y + np.random.normal(0, 0.5))
+                      for x, y in true_positions]
+
+# Process measurements
+estimated_positions = []
+for meas in noisy_measurements:
+    kf.predict()
+    kf.update(np.array(meas))
+    estimated_positions.append(kf.state[:2].copy())  # Extract position
+
+print("True vs Estimated positions:")
+for true, est in zip(true_positions, estimated_positions):
+    print(f"True: {true}, Est: ({est[0]:.2f}, {est[1]:.2f})")
+```
+
+#### Extended Kalman Filter (EKF)
+
+For non-linear systems, the EKF linearizes around the current state:
+
+```python
+class ExtendedKalmanFilter:
+    def __init__(self, state_dim, measurement_dim):
+        self.state_dim = state_dim
+        self.measurement_dim = measurement_dim
+        self.state = np.zeros(state_dim)
+        self.covariance = np.eye(state_dim) * 1000
+        self.Q = np.eye(state_dim) * 0.1
+        self.R = np.eye(measurement_dim) * 1.0
+
+    def state_transition_model(self, state, dt):
+        """Non-linear state transition: constant turn rate and velocity model"""
+        x, y, theta, v, omega = state
+
+        # Non-linear motion model
+        new_theta = theta + omega * dt
+        new_x = x + v * np.cos(theta) * dt
+        new_y = y + v * np.sin(theta) * dt
+        new_v = v  # Assume constant speed
+        new_omega = omega  # Assume constant turn rate
+
+        return np.array([new_x, new_y, new_theta, new_v, new_omega])
+
+    def measurement_model(self, state):
+        """Non-linear measurement model: range and bearing to landmark"""
+        x, y, theta, _, _ = state
+        landmark_x, landmark_y = 10.0, 10.0  # Known landmark position
+
+        # Range and bearing measurements
+        dx = landmark_x - x
+        dy = landmark_y - y
+        range_meas = np.sqrt(dx**2 + dy**2)
+        bearing_meas = np.arctan2(dy, dx) - theta
+
+        return np.array([range_meas, bearing_meas])
+
+    def jacobian_state_transition(self, state, dt):
+        """Jacobian of state transition model"""
+        x, y, theta, v, omega = state
+
+        F = np.eye(self.state_dim)
+
+        # Partial derivatives for motion model
+        F[0, 2] = -v * np.sin(theta) * dt  # ∂x/∂theta
+        F[0, 3] = np.cos(theta) * dt       # ∂x/∂v
+        F[1, 2] = v * np.cos(theta) * dt   # ∂y/∂theta
+        F[1, 3] = np.sin(theta) * dt       # ∂y/∂v
+        F[0, 4] = 0                        # ∂x/∂omega
+        F[1, 4] = 0                        # ∂y/∂omega
+        F[2, 4] = dt                       # ∂theta/∂omega
+
+        return F
+
+    def jacobian_measurement(self, state):
+        """Jacobian of measurement model"""
+        x, y, theta, _, _ = state
+        landmark_x, landmark_y = 10.0, 10.0
+
+        dx = landmark_x - x
+        dy = landmark_y - y
+        r_squared = dx**2 + dy**2
+        r = np.sqrt(r_squared)
+
+        H = np.zeros((self.measurement_dim, self.state_dim))
+
+        # Range measurement derivatives
+        H[0, 0] = -dx / r  # ∂range/∂x
+        H[0, 1] = -dy / r  # ∂range/∂y
+
+        # Bearing measurement derivatives
+        H[1, 0] = dy / r_squared  # ∂bearing/∂x
+        H[1, 1] = -dx / r_squared # ∂bearing/∂y
+        H[1, 2] = -1              # ∂bearing/∂theta
+
+        return H
+
+    def predict(self, dt):
+        """EKF prediction step"""
+        # Non-linear state prediction
+        self.state = self.state_transition_model(self.state, dt)
+
+        # Jacobian of state transition
+        F = self.jacobian_state_transition(self.state, dt)
+
+        # Covariance prediction
+        self.covariance = F @ self.covariance @ F.T + self.Q
+
+    def update(self, measurement):
+        """EKF update step"""
+        # Predicted measurement
+        h_pred = self.measurement_model(self.state)
+
+        # Innovation
+        innovation = measurement - h_pred
+
+        # Jacobian of measurement model
+        H = self.jacobian_measurement(self.state)
+
+        # Innovation covariance
+        innovation_cov = H @ self.covariance @ H.T + self.R
+
+        # Kalman gain
+        kalman_gain = self.covariance @ H.T @ np.linalg.inv(innovation_cov)
+
+        # Update state and covariance
+        self.state = self.state + kalman_gain @ innovation
+        self.covariance = (np.eye(self.state_dim) - kalman_gain @ H) @ self.covariance
+
+# Example usage for robot localization
+ekf = ExtendedKalmanFilter(state_dim=5, measurement_dim=2)  # [x, y, theta, v, omega] → [range, bearing]
+
+# Initialize state estimate
+ekf.state = np.array([0.0, 0.0, 0.0, 1.0, 0.1])  # Starting position with velocity and turn rate
+
+# Simulate robot movement and measurements
+dt = 0.1
+for step in range(50):
+    # True robot movement (for simulation)
+    ekf.predict(dt)
+
+    # Simulate measurement (with noise)
+    true_state = ekf.state.copy()  # In real system, this would come from sensors
+    true_meas = ekf.measurement_model(true_state)
+    noisy_meas = true_meas + np.random.multivariate_normal(
+        np.zeros(2), np.eye(2) * 0.1
+    )
+
+    ekf.update(noisy_meas)
+
+    if step % 10 == 0:  # Print every 10 steps
+        print(f"Step {step}: Estimated pos = ({ekf.state[0]:.2f}, {ekf.state[1]:.2f}), "
+              f"heading = {ekf.state[2]:.2f} rad")
+```
+
+#### Unscented Kalman Filter (UKF)
+
+The UKF addresses EKF limitations by using deterministic sampling:
+
+```python
+class UnscentedKalmanFilter:
+    def __init__(self, state_dim, measurement_dim):
+        self.state_dim = state_dim
+        self.measurement_dim = measurement_dim
+        self.state = np.zeros(state_dim)
+        self.covariance = np.eye(state_dim) * 1000
+        self.Q = np.eye(state_dim) * 0.1
+        self.R = np.eye(measurement_dim) * 1.0
+
+        # UKF parameters
+        self.alpha = 1e-3  # Spread of sigma points
+        self.beta = 2      # Prior knowledge of distribution (2 for Gaussian)
+        self.kappa = 0     # Secondary scaling parameter
+
+        # Calculate weights
+        self.lambda_ = self.alpha**2 * (self.state_dim + self.kappa) - self.state_dim
+        self.gamma = np.sqrt(self.state_dim + self.lambda_)
+
+        self.W_m = np.full(2*self.state_dim + 1, 1/(2*(self.state_dim + self.lambda_)))
+        self.W_c = self.W_m.copy()
+        self.W_m[0] = self.lambda_ / (self.state_dim + self.lambda_)
+        self.W_c[0] = self.lambda_ / (self.state_dim + self.lambda_) + (1 - self.alpha**2 + self.beta)
+
+    def generate_sigma_points(self):
+        """Generate sigma points for UKF"""
+        # Cholesky decomposition of covariance
+        U = self.gamma * np.linalg.cholesky(self.covariance + 1e-9*np.eye(self.state_dim))
+
+        sigma_points = np.zeros((2*self.state_dim + 1, self.state_dim))
+
+        # Center point
+        sigma_points[0] = self.state
+
+        # Upper and lower points
+        for i in range(self.state_dim):
+            sigma_points[i+1] = self.state + U[i, :]
+            sigma_points[self.state_dim+i+1] = self.state - U[i, :]
+
+        return sigma_points
+
+    def state_transition_function(self, state, dt=0.1):
+        """Non-linear state transition function"""
+        # Simple bicycle model for vehicle
+        x, y, theta, v = state
+        new_x = x + v * np.cos(theta) * dt
+        new_y = y + v * np.sin(theta) * dt
+        new_theta = theta + 0.1 * dt  # Constant angular velocity
+        new_v = v * 0.99  # Slight deceleration
+        return np.array([new_x, new_y, new_theta, new_v])
+
+    def measurement_function(self, state):
+        """Non-linear measurement function"""
+        x, y, theta, v = state
+        # Measure x, y position
+        return np.array([x, y])
+
+    def predict(self, dt=0.1):
+        """UKF prediction step"""
+        # Generate sigma points
+        sigma_points = self.generate_sigma_points()
+
+        # Propagate sigma points through non-linear function
+        propagated_points = np.zeros_like(sigma_points)
+        for i, point in enumerate(sigma_points):
+            propagated_points[i] = self.state_transition_function(point, dt)
+
+        # Calculate predicted state (weighted mean)
+        self.state = np.zeros(self.state_dim)
+        for i in range(2*self.state_dim + 1):
+            self.state += self.W_m[i] * propagated_points[i]
+
+        # Calculate predicted covariance
+        self.covariance = np.zeros((self.state_dim, self.state_dim))
+        for i in range(2*self.state_dim + 1):
+            diff = (propagated_points[i] - self.state).reshape(-1, 1)
+            self.covariance += self.W_c[i] * diff @ diff.T
+
+        self.covariance += self.Q
+
+    def update(self, measurement):
+        """UKF update step"""
+        # Generate sigma points
+        sigma_points = self.generate_sigma_points()
+
+        # Transform sigma points through measurement function
+        measurement_points = np.zeros((2*self.state_dim + 1, self.measurement_dim))
+        for i, point in enumerate(sigma_points):
+            measurement_points[i] = self.measurement_function(point)
+
+        # Calculate predicted measurement (weighted mean)
+        pred_measurement = np.zeros(self.measurement_dim)
+        for i in range(2*self.state_dim + 1):
+            pred_measurement += self.W_m[i] * measurement_points[i]
+
+        # Calculate innovation covariance
+        innovation_cov = np.zeros((self.measurement_dim, self.measurement_dim))
+        for i in range(2*self.state_dim + 1):
+            diff = (measurement_points[i] - pred_measurement).reshape(-1, 1)
+            innovation_cov += self.W_c[i] * diff @ diff.T
+
+        innovation_cov += self.R
+
+        # Calculate cross-covariance
+        cross_cov = np.zeros((self.state_dim, self.measurement_dim))
+        for i in range(2*self.state_dim + 1):
+            state_diff = (sigma_points[i] - self.state).reshape(-1, 1)
+            meas_diff = (measurement_points[i] - pred_measurement).reshape(-1, 1)
+            cross_cov += self.W_c[i] * state_diff @ meas_diff.T
+
+        # Calculate Kalman gain
+        kalman_gain = cross_cov @ np.linalg.inv(innovation_cov)
+
+        # Update state and covariance
+        innovation = measurement - pred_measurement
+        self.state = self.state + kalman_gain @ innovation
+        self.covariance = self.covariance - kalman_gain @ innovation_cov @ kalman_gain.T
+
+# Example usage
+ukf = UnscentedKalmanFilter(state_dim=4, measurement_dim=2)  # [x, y, theta, v] → [x, y]
+ukf.state = np.array([0.0, 0.0, 0.0, 1.0])
+
+# Simulate measurements
+for step in range(20):
+    ukf.predict(dt=0.1)
+
+    # Simulated measurement with noise
+    true_pos = ukf.state[:2]  # Extract x, y
+    noisy_meas = true_pos + np.random.normal(0, 0.1, 2)
+
+    ukf.update(noisy_meas)
+
+    print(f"Step {step}: Pos = ({ukf.state[0]:.2f}, {ukf.state[1]:.2f}), "
+          f"Vel = {ukf.state[3]:.2f}")
+```
+
+### Particle Filters
+
+For highly non-linear and non-Gaussian problems, particle filters offer superior performance:
+
+```python
+class ParticleFilter:
+    def __init__(self, state_dim, num_particles=1000):
+        self.state_dim = state_dim
+        self.num_particles = num_particles
+
+        # Initialize particles randomly
+        self.particles = np.random.randn(num_particles, state_dim) * 2
+        self.weights = np.ones(num_particles) / num_particles
+
+        # Process and measurement noise
+        self.process_noise = np.eye(state_dim) * 0.1
+        self.measurement_noise = np.eye(2) * 0.5
+
+    def predict(self, control_input=None, dt=0.1):
+        """Predict particle states forward in time"""
+        for i in range(self.num_particles):
+            # Apply motion model with noise
+            old_state = self.particles[i]
+
+            # Simple motion model: constant velocity with some randomness
+            new_state = old_state.copy()
+            new_state[0] += old_state[2] * dt + np.random.normal(0, 0.1)  # x += vx*dt
+            new_state[1] += old_state[3] * dt + np.random.normal(0, 0.1)  # y += vy*dt
+            new_state[2] += np.random.normal(0, 0.05)  # Random velocity change
+            new_state[3] += np.random.normal(0, 0.05)  # Random velocity change
+
+            self.particles[i] = new_state
+
+    def calculate_likelihood(self, particle_state, measurement):
+        """Calculate likelihood of measurement given particle state"""
+        # Expected measurement based on particle state
+        expected_measurement = particle_state[:2]  # Assume measuring x, y
+
+        # Calculate likelihood using Gaussian model
+        diff = measurement - expected_measurement
+        normalization = 1.0 / np.sqrt((2 * np.pi)**2 * np.linalg.det(self.measurement_noise))
+        exponent = -0.5 * diff.T @ np.linalg.inv(self.measurement_noise) @ diff
+        likelihood = normalization * np.exp(exponent)
+
+        return likelihood
+
+    def update(self, measurement):
+        """Update particle weights based on measurement"""
+        # Calculate weights based on likelihood
+        for i in range(self.num_particles):
+            likelihood = self.calculate_likelihood(self.particles[i], measurement)
+            self.weights[i] *= likelihood
+
+        # Normalize weights
+        self.weights /= np.sum(self.weights)
+
+        # Resample if effective sample size is too low
+        effective_samples = 1.0 / np.sum(self.weights**2)
+        if effective_samples < self.num_particles / 2:
+            self.resample()
+
+    def resample(self):
+        """Resample particles based on weights"""
+        # Systematic resampling
+        indices = []
+        cumulative_sum = np.cumsum(self.weights)
+        u = np.random.uniform(0, 1/self.num_particles)
+
+        i = 0
+        for j in range(self.num_particles):
+            while u > cumulative_sum[i]:
+                i += 1
+            indices.append(i)
+            u += 1/self.num_particles
+
+        # Resample particles and reset weights
+        self.particles = self.particles[indices]
+        self.weights = np.ones(self.num_particles) / self.num_particles
+
+    def estimate_state(self):
+        """Estimate state from weighted particles"""
+        return np.average(self.particles, axis=0, weights=self.weights)
+
+    def estimate_covariance(self):
+        """Estimate covariance from particles"""
+        mean = self.estimate_state()
+        cov = np.zeros((self.state_dim, self.state_dim))
+
+        for i in range(self.num_particles):
+            diff = (self.particles[i] - mean).reshape(-1, 1)
+            cov += self.weights[i] * diff @ diff.T
+
+        return cov
+
+# Example usage
+pf = ParticleFilter(state_dim=4, num_particles=1000)  # [x, y, vx, vy]
+
+# Simulate tracking
+true_trajectory = []
+estimated_trajectory = []
+
+for step in range(30):
+    pf.predict(dt=0.1)
+
+    # True state evolution (for simulation)
+    if step == 0:
+        true_state = np.array([0.0, 0.0, 0.5, 0.3])
+    else:
+        # Simple motion model for true state
+        true_state[0] += true_state[2] * 0.1
+        true_state[1] += true_state[3] * 0.1
+        # Add slight random walk to velocity
+        true_state[2] += np.random.normal(0, 0.05)
+        true_state[3] += np.random.normal(0, 0.05)
+
+    true_trajectory.append(true_state[:2].copy())
+
+    # Simulated measurement with noise
+    true_measurement = true_state[:2] + np.random.normal(0, 0.1, 2)
+
+    pf.update(true_measurement)
+
+    estimated_state = pf.estimate_state()
+    estimated_trajectory.append(estimated_state[:2].copy())
+
+    if step % 10 == 0:
+        print(f"Step {step}: True pos = ({true_state[0]:.2f}, {true_state[1]:.2f}), "
+              f"Est pos = ({estimated_state[0]:.2f}, {estimated_state[1]:.2f})")
+
+# Calculate RMSE
+rmse = np.sqrt(np.mean([(true_pos - est_pos)**2 for true_pos, est_pos in
+                        zip(true_trajectory, estimated_trajectory)]))
+print(f"Average RMSE: {rmse:.3f}")
+```
+
+## Multi-Sensor Integration Architectures
+
+### Centralized Fusion
+
+In centralized fusion, all raw sensor data is processed in a single location:
+
+```python
+class CentralizedFusion:
+    """Centralized sensor fusion architecture"""
+
+    def __init__(self):
+        # Individual sensor filters
+        self.camera_filter = ExtendedKalmanFilter(state_dim=6, measurement_dim=4)  # 3D pos + vel
+        self.lidar_filter = ExtendedKalmanFilter(state_dim=6, measurement_dim=3)   # 3D pos
+        self.imu_filter = ExtendedKalmanFilter(state_dim=9, measurement_dim=6)     # pos + vel + orient
+
+        # Global state estimator
+        self.global_filter = UnscentedKalmanFilter(state_dim=15, measurement_dim=13)  # Combined state
+
+        # Sensor-to-global coordinate transformations
+        self.camera_to_global = np.eye(4)
+        self.lidar_to_global = np.eye(4)
+        self.imu_to_global = np.eye(4)
+
+    def process_camera_data(self, image_features, timestamp):
+        """Process camera data and update camera-specific filter"""
+        # Extract features and convert to 3D positions using stereo/depth
+        object_positions = self.extract_3d_positions(image_features)
+
+        # Update camera-specific filter
+        camera_state = self.camera_filter.state
+        # Update with object positions...
+
+        # Transform to global coordinates and feed to global filter
+        global_positions = self.transform_to_global(object_positions, self.camera_to_global)
+
+        return global_positions
+
+    def process_lidar_data(self, point_cloud, timestamp):
+        """Process LiDAR data and update LiDAR-specific filter"""
+        # Extract objects from point cloud
+        objects = self.segment_objects(point_cloud)
+
+        # Update LiDAR-specific filter
+        # ...
+
+        # Transform to global coordinates
+        global_positions = self.transform_to_global(objects, self.lidar_to_global)
+
+        return global_positions
+
+    def process_imu_data(self, imu_data, timestamp):
+        """Process IMU data and update IMU-specific filter"""
+        # Extract orientation and acceleration
+        orientation = self.extract_orientation(imu_data)
+        acceleration = self.extract_acceleration(imu_data)
+
+        # Update IMU-specific filter
+        # ...
+
+        # Transform to global coordinates
+        global_state = self.transform_imu_to_global(orientation, acceleration, self.imu_to_global)
+
+        return global_state
+
+    def centralized_fusion_step(self, camera_data, lidar_data, imu_data):
+        """Perform centralized fusion of all sensor data"""
+        # Process each sensor modality
+        camera_results = self.process_camera_data(camera_data, 0)
+        lidar_results = self.process_lidar_data(lidar_data, 0)
+        imu_results = self.process_imu_data(imu_data, 0)
+
+        # Combine all results in global filter
+        combined_measurement = self.combine_measurements(
+            camera_results, lidar_results, imu_results
+        )
+
+        # Update global state estimate
+        self.global_filter.update(combined_measurement)
+
+        return self.global_filter.state
+
+    def extract_3d_positions(self, features):
+        """Extract 3D positions from camera features"""
+        # Implementation would use stereo vision, depth estimation, etc.
+        return np.array([[1.0, 2.0, 0.5]])  # Placeholder
+
+    def segment_objects(self, point_cloud):
+        """Segment objects from LiDAR point cloud"""
+        # Implementation would use clustering, segmentation algorithms
+        return np.array([[3.0, 1.0, 0.2]])  # Placeholder
+
+    def extract_orientation(self, imu_data):
+        """Extract orientation from IMU data"""
+        # Implementation would integrate gyroscope data, use sensor fusion
+        return np.array([0.1, 0.05, 0.02])  # Placeholder
+
+    def combine_measurements(self, cam_data, lidar_data, imu_data):
+        """Combine measurements from different sensors"""
+        # Concatenate and weight appropriately
+        combined = np.concatenate([cam_data.flatten(), lidar_data.flatten(), imu_data.flatten()])
+        return combined[:13]  # Truncate to expected size
+```
+
+### Distributed Fusion
+
+Distributed fusion processes data at each sensor node before combining:
+
+```python
+class DistributedFusionNode:
+    """Individual sensor node in distributed fusion system"""
+
+    def __init__(self, node_id, sensor_type):
+        self.node_id = node_id
+        self.sensor_type = sensor_type
+        self.local_estimator = self.initialize_estimator()
+        self.neighbors = []
+        self.communication_delay = 0.05  # 50ms typical
+
+    def initialize_estimator(self):
+        """Initialize local estimator based on sensor type"""
+        if self.sensor_type == "camera":
+            return ExtendedKalmanFilter(state_dim=6, measurement_dim=4)
+        elif self.sensor_type == "lidar":
+            return ExtendedKalmanFilter(state_dim=6, measurement_dim=3)
+        elif self.sensor_type == "imu":
+            return ExtendedKalmanFilter(state_dim=9, measurement_dim=6)
+        else:
+            raise ValueError(f"Unknown sensor type: {self.sensor_type}")
+
+    def process_local_measurement(self, measurement, timestamp):
+        """Process measurement at local node"""
+        self.local_estimator.update(measurement)
+        return self.local_estimator.state, self.local_estimator.covariance
+
+    def communicate_with_neighbors(self, current_state, current_covariance):
+        """Share state estimate with neighboring nodes"""
+        for neighbor in self.neighbors:
+            # Simulate communication delay
+            estimated_neighbor_state = self.predict_neighbor_state(
+                neighbor, current_state, self.communication_delay
+            )
+
+            # Fuse with neighbor's estimate
+            fused_state, fused_covariance = self.fuse_with_neighbor(
+                current_state, current_covariance,
+                estimated_neighbor_state, neighbor.covariance
+            )
+
+            current_state, current_covariance = fused_state, fused_covariance
+
+        return current_state, current_covariance
+
+    def predict_neighbor_state(self, neighbor, local_state, delay):
+        """Predict what neighbor's state should be considering communication delay"""
+        # Simple prediction model
+        predicted_state = neighbor.local_estimator.state.copy()
+        # Apply prediction based on delay
+        return predicted_state
+
+    def fuse_with_neighbor(self, local_state, local_cov, neighbor_state, neighbor_cov):
+        """Fuse local and neighbor state estimates"""
+        # Covariance intersection algorithm
+        local_prec = np.linalg.inv(local_cov + 1e-9*np.eye(len(local_cov)))
+        neighbor_prec = np.linalg.inv(neighbor_cov + 1e-9*np.eye(len(neighbor_cov)))
+
+        # Combined precision
+        combined_prec = local_prec + neighbor_prec
+
+        # Combined state (weighted by precision)
+        combined_state = np.linalg.inv(combined_prec) @ (
+            local_prec @ local_state + neighbor_prec @ neighbor_state
+        )
+
+        # Combined covariance
+        combined_cov = np.linalg.inv(combined_prec)
+
+        return combined_state, combined_cov
+
+class DistributedFusionSystem:
+    """Overall distributed fusion system"""
+
+    def __init__(self):
+        self.nodes = []
+
+    def add_node(self, node):
+        """Add a sensor node to the system"""
+        self.nodes.append(node)
+
+    def connect_nodes(self):
+        """Establish communication connections between nodes"""
+        # Create a simple communication graph
+        for i, node in enumerate(self.nodes):
+            # Connect to nearby nodes (simple topology)
+            for j, other_node in enumerate(self.nodes):
+                if i != j and abs(i-j) <= 2:  # Connect to adjacent nodes
+                    node.neighbors.append(other_node)
+
+    def distributed_fusion_step(self, measurements):
+        """Perform distributed fusion across all nodes"""
+        # Process measurements locally
+        local_results = []
+        for node, meas in zip(self.nodes, measurements):
+            local_state, local_cov = node.process_local_measurement(meas, 0)
+            local_results.append((local_state, local_cov))
+
+        # Exchange and fuse information
+        final_estimates = []
+        for i, node in enumerate(self.nodes):
+            fused_state, fused_cov = node.communicate_with_neighbors(
+                local_results[i][0], local_results[i][1]
+            )
+            final_estimates.append((fused_state, fused_cov))
+
+        return final_estimates
+```
+
+### Hierarchical Fusion
+
+Hierarchical fusion combines sensors at multiple levels:
+
+```python
+class HierarchicalFusion:
+    """Hierarchical sensor fusion system"""
+
+    def __init__(self):
+        # Level 1: Sensor-specific processing
+        self.level1_processors = {
+            'camera': self.process_camera_data,
+            'lidar': self.process_lidar_data,
+            'radar': self.process_radar_data,
+            'imu': self.process_imu_data
+        }
+
+        # Level 2: Modality fusion
+        self.level2_fusers = {
+            'vision_depth': self.fuse_vision_depth,
+            'lidar_radar': self.fuse_lidar_radar,
+            'imu_odometry': self.fuse_imu_odometry
+        }
+
+        # Level 3: Global fusion
+        self.level3_fuser = self.global_fusion
+
+        # Individual estimators for each level
+        self.modality_estimators = {}
+        self.global_estimator = UnscentedKalmanFilter(state_dim=15, measurement_dim=15)
+
+    def process_camera_data(self, camera_data):
+        """Level 1: Process camera data"""
+        # Extract features, perform object detection, estimate depth
+        features = self.extract_features(camera_data)
+        detections = self.object_detection(features)
+        depth_map = self.estimate_depth(camera_data)
+
+        return {
+            'features': features,
+            'detections': detections,
+            'depth': depth_map,
+            'timestamp': camera_data.get('timestamp', 0)
+        }
+
+    def process_lidar_data(self, lidar_data):
+        """Level 1: Process LiDAR data"""
+        # Segment point cloud, detect objects, estimate surfaces
+        point_cloud = lidar_data['points']
+        segments = self.segment_point_cloud(point_cloud)
+        objects = self.detect_objects_lidar(segments)
+
+        return {
+            'segments': segments,
+            'objects': objects,
+            'free_space': self.estimate_free_space(segments),
+            'timestamp': lidar_data.get('timestamp', 0)
+        }
+
+    def process_radar_data(self, radar_data):
+        """Level 1: Process radar data"""
+        # Extract targets, estimate velocities, classify objects
+        targets = radar_data['targets']
+        velocities = self.estimate_target_velocities(targets)
+        classifications = self.classify_targets(targets)
+
+        return {
+            'targets': targets,
+            'velocities': velocities,
+            'classifications': classifications,
+            'timestamp': radar_data.get('timestamp', 0)
+        }
+
+    def process_imu_data(self, imu_data):
+        """Level 1: Process IMU data"""
+        # Estimate orientation, detect motion, estimate gravity
+        orientation = self.integrate_gyroscope(imu_data['gyro'])
+        linear_accel = self.remove_gravity(imu_data['accel'], orientation)
+        motion_state = self.detect_motion_state(linear_accel)
+
+        return {
+            'orientation': orientation,
+            'acceleration': linear_accel,
+            'motion_state': motion_state,
+            'timestamp': imu_data.get('timestamp', 0)
+        }
+
+    def fuse_vision_depth(self, camera_output, depth_output):
+        """Level 2: Fuse vision and depth data"""
+        # Combine visual features with depth information
+        combined_objects = []
+
+        for vis_obj in camera_output['detections']:
+            # Match with depth information
+            depth_region = self.extract_depth_region(
+                depth_output['depth'], vis_obj['bbox']
+            )
+
+            # Combine visual classification with depth estimation
+            combined_obj = {
+                'class': vis_obj['class'],
+                'confidence': vis_obj['confidence'],
+                'position_3d': self.estimate_3d_position(vis_obj, depth_region),
+                'size': self.estimate_size(vis_obj, depth_region)
+            }
+            combined_objects.append(combined_obj)
+
+        return combined_objects
+
+    def fuse_lidar_radar(self, lidar_output, radar_output):
+        """Level 2: Fuse LiDAR and radar data"""
+        # Match LiDAR clusters with radar targets
+        matched_objects = []
+
+        for lidar_obj in lidar_output['objects']:
+            for radar_target in radar_output['targets']:
+                # Check spatial and temporal consistency
+                if self.is_consistent(lidar_obj, radar_target):
+                    # Combine position from LiDAR with velocity from radar
+                    combined = {
+                        'position': lidar_obj['position'],
+                        'velocity': radar_target['velocity'],
+                        'classification': self.combine_classifications(
+                            lidar_obj.get('classification'),
+                            radar_output['classifications'].get(radar_target['id'])
+                        )
+                    }
+                    matched_objects.append(combined)
+
+        return matched_objects
+
+    def global_fusion(self, modality_outputs):
+        """Level 3: Global fusion of all modalities"""
+        # Combine all processed information into global state
+        all_objects = []
+
+        # Collect objects from different modality fusions
+        if 'vision_depth' in modality_outputs:
+            all_objects.extend(modality_outputs['vision_depth'])
+        if 'lidar_radar' in modality_outputs:
+            all_objects.extend(modality_outputs['lidar_radar'])
+        if 'imu_odometry' in modality_outputs:
+            all_objects.extend(modality_outputs['imu_odometry'])
+
+        # Perform global data association and state estimation
+        global_state = self.associate_and_estimate(all_objects)
+
+        return global_state
+
+    def associate_and_estimate(self, all_objects):
+        """Associate objects and estimate global state"""
+        # Implementation would include:
+        # - Data association (matching observations to tracks)
+        # - State estimation (position, velocity, classification of objects)
+        # - Uncertainty propagation
+        # - Track management (initiation, maintenance, deletion)
+
+        return {
+            'ego_state': self.estimate_ego_state(),
+            'tracked_objects': self.perform_tracking(all_objects),
+            'environment_map': self.build_environment_map(all_objects)
+        }
+
+    def extract_features(self, image):
+        """Extract visual features from image"""
+        # Placeholder for feature extraction
+        return [{'type': 'corner', 'position': [100, 150], 'strength': 0.8}]
+
+    def object_detection(self, features):
+        """Detect objects using extracted features"""
+        # Placeholder for object detection
+        return [{'class': 'car', 'bbox': [50, 50, 200, 150], 'confidence': 0.9}]
+
+    def estimate_depth(self, image_pair):
+        """Estimate depth from stereo images"""
+        # Placeholder for depth estimation
+        return np.random.rand(480, 640) * 50  # 0-50m depth map
+
+    def segment_point_cloud(self, points):
+        """Segment point cloud into objects"""
+        # Placeholder for segmentation
+        return [{'points': points[:100], 'centroid': [1.0, 2.0, 0.5]}]
+
+    def detect_objects_lidar(self, segments):
+        """Detect objects from segmented point cloud"""
+        # Placeholder for LiDAR object detection
+        return [{'position': [1.0, 2.0, 0.5], 'size': [2.0, 1.0, 1.5]}]
+
+    def estimate_target_velocities(self, targets):
+        """Estimate velocities of radar targets"""
+        # Placeholder for velocity estimation
+        return [{'id': t['id'], 'velocity': [5.0, 0.0, 0.0]} for t in targets]
+
+    def classify_targets(self, targets):
+        """Classify radar targets"""
+        # Placeholder for classification
+        return {t['id']: 'vehicle' for t in targets}
+
+    def integrate_gyroscope(self, gyro_data):
+        """Integrate gyroscope data for orientation"""
+        # Placeholder for orientation estimation
+        return [0.1, 0.05, 0.02]
+
+    def remove_gravity(self, accel_data, orientation):
+        """Remove gravity from accelerometer data"""
+        # Placeholder for gravity removal
+        return [0.2, 0.1, 9.7]
+
+    def hierarchical_fusion_pipeline(self, sensor_inputs):
+        """Complete hierarchical fusion pipeline"""
+        # Level 1: Process individual sensors
+        level1_outputs = {}
+        for sensor_type, data in sensor_inputs.items():
+            if sensor_type in self.level1_processors:
+                level1_outputs[sensor_type] = self.level1_processors[sensor_type](data)
+
+        # Level 2: Fuse modalities
+        level2_outputs = {}
+        for fusion_type, (mod1, mod2) in [('vision_depth', ('camera', 'depth')),
+                                         ('lidar_radar', ('lidar', 'radar'))]:
+            if mod1 in level1_outputs and mod2 in level1_outputs:
+                level2_outputs[fusion_type] = self.level2_fusers[fusion_type](
+                    level1_outputs[mod1], level1_outputs[mod2]
+                )
+
+        # Level 3: Global fusion
+        global_state = self.level3_fuser(level2_outputs)
+
+        return global_state
+```
+
+## Advanced Fusion Techniques
+
+### Deep Learning-Based Fusion
+
+Modern approaches use neural networks for sensor fusion:
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+class DeepSensorFusion(nn.Module):
+    """Deep learning approach to sensor fusion"""
+
+    def __init__(self, camera_features=512, lidar_features=256, imu_features=6):
+        super(DeepSensorFusion, self).__init__()
+
+        # Feature extraction networks for each sensor
+        self.camera_encoder = nn.Sequential(
+            nn.Linear(camera_features, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, 128),
+            nn.ReLU()
+        )
+
+        self.lidar_encoder = nn.Sequential(
+            nn.Linear(lidar_features, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.ReLU()
+        )
+
+        self.imu_encoder = nn.Sequential(
+            nn.Linear(imu_features, 32),
+            nn.ReLU(),
+            nn.Linear(32, 16),
+            nn.ReLU()
+        )
+
+        # Attention mechanism to weigh sensor importance
+        self.attention = nn.MultiheadAttention(embed_dim=204, num_heads=4)
+
+        # Fusion network
+        self.fusion_network = nn.Sequential(
+            nn.Linear(204, 512),  # Combined features from all sensors
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 6)  # Output: [x, y, z, vx, vy, vz] for tracking
+        )
+
+        # Uncertainty estimation network
+        self.uncertainty_network = nn.Sequential(
+            nn.Linear(204, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 6)  # Uncertainty for each output dimension
+        )
+
+    def forward(self, camera_feat, lidar_feat, imu_feat):
+        # Encode features from each sensor
+        cam_encoded = self.camera_encoder(camera_feat)
+        lidar_encoded = self.lidar_encoder(lidar_feat)
+        imu_encoded = self.imu_encoder(imu_feat)
+
+        # Concatenate encoded features
+        combined_features = torch.cat([cam_encoded, lidar_encoded, imu_encoded], dim=-1)
+
+        # Apply attention mechanism
+        att_features, att_weights = self.attention(
+            combined_features.unsqueeze(0),  # Add sequence dimension
+            combined_features.unsqueeze(0),
+            combined_features.unsqueeze(0)
+        )
+        att_features = att_features.squeeze(0)  # Remove sequence dimension
+
+        # Get fused state estimate
+        state_estimate = self.fusion_network(att_features)
+
+        # Get uncertainty estimate
+        uncertainty = torch.exp(self.uncertainty_network(att_features))  # Ensure positive
+
+        return state_estimate, uncertainty, att_weights
+
+# Training example
+def train_deep_fusion():
+    """Example training loop for deep fusion network"""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = DeepSensorFusion().to(device)
+
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.MSELoss()
+
+    # Simulated training data
+    batch_size = 32
+    num_batches = 100
+
+    for epoch in range(10):
+        total_loss = 0
+
+        for batch in range(num_batches):
+            # Simulated sensor features (in practice, these would come from actual sensors)
+            camera_features = torch.randn(batch_size, 512).to(device)
+            lidar_features = torch.randn(batch_size, 256).to(device)
+            imu_features = torch.randn(batch_size, 6).to(device)
+
+            # Simulated ground truth
+            true_state = torch.randn(batch_size, 6).to(device)
+
+            # Forward pass
+            state_pred, uncertainty, attention_weights = model(
+                camera_features, lidar_features, imu_features
+            )
+
+            # Calculate loss (weighted by uncertainty)
+            diff = state_pred - true_state
+            weighted_diff = diff / (uncertainty + 1e-6)  # Normalize by uncertainty
+            loss = torch.mean(weighted_diff**2)
+
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
+        print(f"Epoch {epoch+1}, Average Loss: {total_loss/num_batches:.4f}")
+
+# Usage example
+deep_fusion = DeepSensorFusion()
+# train_deep_fusion()  # Uncomment to train (requires actual data)
+```
+
+### Covariance Intersection
+
+For fusing estimates with unknown correlations:
+
+```python
+def covariance_intersection(state1, cov1, state2, cov2):
+    """
+    Fuse two state estimates with unknown correlation
+    Uses Covariance Intersection algorithm
+    """
+    # Calculate precision matrices
+    prec1 = np.linalg.inv(cov1 + 1e-9 * np.eye(cov1.shape[0]))
+    prec2 = np.linalg.inv(cov2 + 1e-9 * np.eye(cov2.shape[0]))
+
+    # Calculate fusion weights using trace criterion
+    # This minimizes the trace of the resulting covariance
+    def calculate_weight(w):
+        cov_comb = np.linalg.inv(w * prec1 + (1-w) * prec2)
+        return np.trace(cov_comb)
+
+    # Find optimal weight using numerical optimization
+    from scipy.optimize import minimize_scalar
+    result = minimize_scalar(calculate_weight, bounds=(0, 1), method='bounded')
+    w_opt = result.x
+
+    # Calculate combined state and covariance
+    prec_combined = w_opt * prec1 + (1 - w_opt) * prec2
+    cov_combined = np.linalg.inv(prec_combined)
+
+    state_combined = cov_combined @ (w_opt * prec1 @ state1 + (1 - w_opt) * prec2 @ state2)
+
+    return state_combined, cov_combined
+
+# Example usage
+state1 = np.array([1.0, 2.0])
+cov1 = np.array([[0.5, 0.1], [0.1, 0.4]])
+
+state2 = np.array([1.2, 1.8])
+cov2 = np.array([[0.3, 0.05], [0.05, 0.2]])
+
+fused_state, fused_cov = covariance_intersection(state1, cov1, state2, cov2)
+print(f"Fused state: {fused_state}")
+print(f"Fused covariance: \n{fused_cov}")
+```
+
+## Performance Evaluation and Metrics
+
+### Tracking Performance Metrics
+
+```python
+def evaluate_tracking_performance(truth, estimates, assignments):
+    """
+    Evaluate multi-object tracking performance
+    """
+    # Calculate various metrics
+    num_true_positives = sum(assignments.values())  # Assigned tracks
+    num_false_positives = len(estimates) - num_true_positives  # False alarms
+    num_false_negatives = len(truth) - num_true_positives  # Missed detections
+
+    precision = num_true_positives / (num_true_positives + num_false_positives) if (num_true_positives + num_false_positives) > 0 else 0
+    recall = num_true_positives / (num_true_positives + num_false_negatives) if (num_true_positives + num_false_negatives) > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    # Calculate positional accuracy
+    position_errors = []
+    for truth_idx, est_idx in assignments.items():
+        if est_idx is not None:
+            error = np.linalg.norm(truth[truth_idx][:2] - estimates[est_idx][:2])
+            position_errors.append(error)
+
+    avg_position_error = np.mean(position_errors) if position_errors else float('inf')
+    rmse_position = np.sqrt(np.mean([e**2 for e in position_errors])) if position_errors else float('inf')
+
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1_score,
+        'avg_position_error': avg_position_error,
+        'rmse_position': rmse_position,
+        'num_objects': len(truth),
+        'num_estimates': len(estimates)
+    }
+
+# Example evaluation
+truth_objects = [np.array([1.0, 2.0]), np.array([3.0, 4.0]), np.array([5.0, 6.0])]
+estimated_objects = [np.array([1.1, 2.1]), np.array([2.9, 4.2]), np.array([7.0, 8.0])]
+assignments = {0: 0, 1: 1, 2: None}  # Third truth object not detected
+
+metrics = evaluate_tracking_performance(truth_objects, estimated_objects, assignments)
+print("Tracking Performance Metrics:")
+for metric, value in metrics.items():
+    print(f"  {metric}: {value}")
+```
+
+## Real-World Applications and Case Studies
+
+### Autonomous Vehicle Sensor Fusion
+
+Autonomous vehicles represent one of the most sophisticated applications of sensor fusion:
+
+```python
+class AutonomousVehicleFusion:
+    """Sensor fusion system for autonomous vehicles"""
+
+    def __init__(self):
+        # Multiple filters for redundancy and different purposes
+        self.localization_filter = UnscentedKalmanFilter(state_dim=6, measurement_dim=6)  # Pos, Vel, Yaw
+        self.object_tracking_fusion = self.initialize_tracking_system()
+        self.environment_mapping = self.initialize_mapping_system()
+
+        # Fail-safe mechanisms
+        self.fallback_strategies = {
+            'gps_failure': self.handle_gps_failure,
+            'lidar_failure': self.handle_lidar_failure,
+            'camera_failure': self.handle_camera_failure
+        }
+
+    def initialize_tracking_system(self):
+        """Initialize multi-object tracking system"""
+        return {
+            'trackers': {},  # Dictionary of object trackers
+            'association_matrix': None,
+            'prediction_horizon': 3.0  # seconds
+        }
+
+    def initialize_mapping_system(self):
+        """Initialize environment mapping system"""
+        return {
+            'occupancy_grid': np.zeros((200, 200)),  # 2D occupancy grid
+            'permanent_features': [],  # Lane markings, traffic signs, etc.
+            'temporary_objects': []   # Moving objects
+        }
+
+    def autonomous_fusion_pipeline(self, sensor_inputs, vehicle_state):
+        """Main fusion pipeline for autonomous vehicle"""
+
+        # 1. Localization
+        localization_result = self.update_localization(
+            sensor_inputs['gps'],
+            sensor_inputs['imu'],
+            sensor_inputs['lidar']
+        )
+
+        # 2. Object Detection and Tracking
+        tracked_objects = self.track_objects(
+            sensor_inputs['camera'],
+            sensor_inputs['lidar'],
+            sensor_inputs['radar']
+        )
+
+        # 3. Environment Mapping
+        environment_map = self.update_environment_map(
+            tracked_objects,
+            sensor_inputs['lidar']
+        )
+
+        # 4. Situation Assessment
+        situation_assessment = self.assess_situation(
+            localization_result,
+            tracked_objects,
+            environment_map
+        )
+
+        # 5. Safety Verification
+        safety_check = self.verify_safety(situation_assessment, vehicle_state)
+
+        return {
+            'ego_pose': localization_result,
+            'tracked_objects': tracked_objects,
+            'environment_map': environment_map,
+            'situation_assessment': situation_assessment,
+            'safety_verified': safety_check,
+            'recommended_action': self.plan_safe_action(situation_assessment, vehicle_state)
+        }
+
+    def update_localization(self, gps_data, imu_data, lidar_data):
+        """Update vehicle localization using multiple sensors"""
+        # Use GPS for absolute position
+        # Use IMU for attitude and high-frequency motion
+        # Use LiDAR for map-based localization
+        # Combine using EKF/UKF for optimal estimate
+        pass
+
+    def track_objects(self, camera_data, lidar_data, radar_data):
+        """Track multiple objects using sensor fusion"""
+        # Perform data association
+        # Update object states
+        # Handle new object initiation and track deletion
+        pass
+
+    def assess_situation(self, ego_pose, tracked_objects, env_map):
+        """Assess current traffic situation"""
+        # Identify potential hazards
+        # Evaluate traffic rules compliance
+        # Predict future states of objects
+        # Assess maneuver feasibility
+        pass
+
+    def verify_safety(self, situation, vehicle_state):
+        """Verify that planned actions are safe"""
+        # Check for collision risks
+        # Verify within operational design domain
+        # Confirm system health
+        pass
+
+    def plan_safe_action(self, situation, vehicle_state):
+        """Plan safe vehicle action based on assessment"""
+        # Generate candidate maneuvers
+        # Evaluate safety of each candidate
+        # Select optimal safe maneuver
+        pass
+
+    def handle_sensor_failure(self, failed_sensor):
+        """Handle sensor failure gracefully"""
+        if failed_sensor in self.fallback_strategies:
+            return self.fallback_strategies[failed_sensor]()
+        else:
+            # Default safe behavior
+            return self.safe_standby_mode()
+
+    def safe_standby_mode(self):
+        """Activate safe standby mode when fusion fails"""
+        # Reduce speed
+        # Increase safety margins
+        # Request human intervention if available
+        # Log error for diagnostics
+        pass
+```
+
+### Robotics Applications
+
+Sensor fusion is critical in robotics for navigation, manipulation, and interaction:
+
+```python
+class RoboticSensorFusion:
+    """Sensor fusion for robotic applications"""
+
+    def __init__(self):
+        # Navigation and mapping
+        self.slam_system = self.initialize_slam()
+
+        # Manipulation
+        self.hand_eye_calibration = np.eye(4)  # Transformation between camera and end-effector
+        self.object_pose_estimator = self.initialize_pose_estimator()
+
+        # Human-robot interaction
+        self.social_awareness_system = self.initialize_social_system()
+
+    def initialize_slam(self):
+        """Initialize SLAM (Simultaneous Localization and Mapping) system"""
+        return {
+            'map': {},
+            'robot_pose': np.eye(4),
+            'loop_closure_detector': None,
+            'global_optimizer': None
+        }
+
+    def initialize_pose_estimator(self):
+        """Initialize object pose estimation system"""
+        return ExtendedKalmanFilter(state_dim=7, measurement_dim=6)  # [x,y,z,rx,ry,rz,w] + confidence
+
+    def robotic_fusion_pipeline(self, sensor_data, task_requirements):
+        """Fusion pipeline for robotic tasks"""
+
+        # 1. Environment Perception
+        environment = self.understand_environment(sensor_data)
+
+        # 2. Task Planning
+        task_plan = self.plan_task(environment, task_requirements)
+
+        # 3. Execution Monitoring
+        execution_state = self.monitor_execution(sensor_data, task_plan)
+
+        # 4. Failure Detection and Recovery
+        recovery_plan = self.detect_and_recover_failures(execution_state)
+
+        return {
+            'environment_model': environment,
+            'task_plan': task_plan,
+            'execution_state': execution_state,
+            'recovery_plan': recovery_plan
+        }
+
+    def understand_environment(self, sensor_data):
+        """Understand environment using multiple sensors"""
+        # Fuse camera, depth, tactile, proximity sensors
+        # Build semantic map
+        # Identify objects and affordances
+        pass
+
+    def plan_task(self, environment, requirements):
+        """Plan task based on environment and requirements"""
+        # Motion planning
+        # Manipulation planning
+        # Interaction planning
+        pass
+
+    def monitor_execution(self, sensor_data, plan):
+        """Monitor task execution using sensor feedback"""
+        # Track progress
+        # Detect deviations
+        # Update plan as needed
+        pass
+
+    def detect_and_recover_failures(self, execution_state):
+        """Detect and recover from execution failures"""
+        # Failure detection
+        # Recovery planning
+        # Alternative strategy generation
+        pass
+```
+
+## Challenges and Future Directions
+
+### Computational Complexity
+
+Sensor fusion systems face significant computational challenges:
+
+- **Real-time requirements**: Processing constraints for safety-critical systems
+- **Scalability**: Managing increasing number of sensors and objects
+- **Power consumption**: Battery-powered systems require efficient algorithms
+- **Memory usage**: Storing historical data for learning and prediction
+
+### Robustness and Safety
+
+Critical challenges in Physical AI sensor fusion:
+
+- **Failure detection**: Identifying sensor and algorithm failures
+- **Graceful degradation**: Maintaining functionality when components fail
+- **Verification and validation**: Ensuring system reliability
+- **Security**: Protecting against adversarial attacks on sensors
+
+### Emerging Trends
+
+#### Neuromorphic Computing
+Using brain-inspired architectures for efficient sensor processing:
+
+```python
+class SpikingNeuralFusion:
+    """Conceptual neuromorphic approach to sensor fusion"""
+
+    def __init__(self):
+        # Event-based processing similar to biological systems
+        self.event_queues = {}  # Queues for different sensor events
+        self.spiking_neurons = []  # Processing units
+        self.synaptic_weights = {}  # Connection strengths
+
+    def process_event(self, sensor_type, event_data):
+        """Process asynchronous sensor events"""
+        # Similar to how retina processes visual events
+        # Only transmit changes, not redundant information
+        pass
+```
+
+#### Quantum Sensor Fusion
+Future possibilities with quantum sensors:
+
+```python
+def quantum_sensor_fusion(quantum_sensors_data):
+    """Conceptual quantum approach to sensor fusion"""
+    # Leverage quantum entanglement for correlated measurements
+    # Use quantum algorithms for optimization
+    # Exploit quantum sensing for unprecedented precision
+    pass
+```
+
+## Summary
+
+Sensor fusion is fundamental to Physical AI, enabling robots to overcome individual sensor limitations through intelligent combination of multiple modalities. The field encompasses classical approaches like Kalman filters and particle filters, modern deep learning techniques, and sophisticated architectural patterns like centralized, distributed, and hierarchical fusion.
+
+Success in sensor fusion requires understanding the characteristics and limitations of individual sensors, selecting appropriate fusion algorithms based on the application requirements, and implementing robust systems that can handle real-world challenges like computational constraints, sensor failures, and safety requirements.
+
+The future of sensor fusion lies in more adaptive, efficient, and intelligent systems that can learn from experience and optimize their fusion strategies based on the operational context. As Physical AI systems become more complex and deployed in more diverse environments, sensor fusion will continue to be a critical enabler of robust and reliable robotic capabilities.
+
+## Key Takeaways
+
+- Sensor fusion overcomes individual sensor limitations through intelligent combination
+- Classical methods (Kalman filters, particle filters) remain important for many applications
+- Modern approaches include deep learning and attention mechanisms
+- Architectural choices (centralized, distributed, hierarchical) affect performance and robustness
+- Real-time constraints and safety requirements are paramount in physical systems
+- Computational efficiency is critical for practical deployment
+- Robustness to sensor failures and environmental changes is essential
+- Evaluation metrics must consider both accuracy and reliability
+
+## References and Further Reading
+
+1. "Multisensor Data Fusion: Theory and Practice" - Hall & Llinas
+2. "Probabilistic Robotics" - Thrun, Burgard & Fox
+3. "Kalman Filtering: Theory and Practice with MATLAB" - Grewal & Andrews
+4. "Statistical Sensor Fusion" - Gustafsson
+5. "Deep Learning for Sensor Fusion in Autonomous Vehicles" - Recent papers in ICRA, IROS, RSS
+6. "Tutorial: Introduction to Multi-target Tracking" - Mahler's work on Finite Set Statistics

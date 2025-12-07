@@ -16,7 +16,11 @@ const SigninForm: React.FC = () => {
       await signin(email, password);
       history.push('/dashboard'); // Navigate to dashboard or homepage on success
     } catch (err) {
-      setError(err.message || 'Failed to sign in. Please check your credentials.');
+      setError(
+        typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message?: string }).message)
+          : 'Failed to sign in. Please check your credentials.'
+      );
     }
   };
 

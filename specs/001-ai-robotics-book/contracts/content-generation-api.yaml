@@ -1,0 +1,278 @@
+# API Contracts: Physical AI & Humanoid Robotics Course Content Generation
+
+## Overview
+This document defines the API contracts for the course content generation system. Since this is primarily a content generation project for Docusaurus documentation, the "APIs" represent the interfaces for content generation, validation, and integration.
+
+## Content Generation API
+
+### Generate Module Content
+- **Endpoint**: `/api/content/generate/module`
+- **Method**: POST
+- **Description**: Generates content for an entire module with 5 chapters
+- **Request Body**:
+  ```json
+  {
+    "moduleId": "string (required)",
+    "moduleTitle": "string (required)",
+    "moduleDescription": "string (required)",
+    "chapters": [
+      {
+        "chapterId": "string (required)",
+        "chapterTitle": "string (required)",
+        "targetWordCount": "integer (1700-2000, default: 1850)"
+      }
+    ],
+    "academicLevel": "string (enum: 'university-grade', default: 'university-grade')",
+    "format": "string (enum: 'mdx', default: 'mdx')"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": "boolean",
+    "moduleId": "string",
+    "moduleContent": {
+      "overview": "string",
+      "chapters": [
+        {
+          "chapterId": "string",
+          "title": "string",
+          "content": "string (MDX format)",
+          "wordCount": "integer",
+          "frontmatter": "object",
+          "learningObjectives": "array of strings",
+          "keyConcepts": "array of strings"
+        }
+      ]
+    },
+    "validationResults": {
+      "wordCountValid": "boolean",
+      "mdxSyntaxValid": "boolean",
+      "academicStandardsMet": "boolean",
+      "technicalAccuracyVerified": "boolean"
+    }
+  }
+  ```
+- **Error Responses**:
+  - 400: Invalid input parameters
+  - 422: Content doesn't meet validation requirements
+  - 500: Internal generation error
+
+### Generate Chapter Content
+- **Endpoint**: `/api/content/generate/chapter`
+- **Method**: POST
+- **Description**: Generates content for a single chapter in MDX format
+- **Request Body**:
+  ```json
+  {
+    "chapterId": "string (required)",
+    "title": "string (required)",
+    "moduleId": "string (required)",
+    "moduleTitle": "string (required)",
+    "targetWordCount": "integer (1700-2000, default: 1850)",
+    "learningObjectives": "array of strings (optional)",
+    "keyConcepts": "array of strings (optional)",
+    "prerequisites": "array of strings (optional)",
+    "examples": "array of objects (optional)",
+    "diagrams": "array of objects (optional)"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": "boolean",
+    "chapter": {
+      "id": "string",
+      "title": "string",
+      "content": "string (MDX format)",
+      "wordCount": "integer",
+      "frontmatter": {
+        "title": "string",
+        "description": "string (150-300 chars)",
+        "tags": "array of strings (3-5)",
+        "sidebar_label": "string",
+        "slug": "string",
+        "authors": "array of strings (optional)",
+        "keywords": "array of strings (3-5)"
+      },
+      "validationResults": {
+        "wordCountValid": "boolean",
+        "mdxSyntaxValid": "boolean",
+        "academicStandardsMet": "boolean",
+        "technicalAccuracyVerified": "boolean"
+      }
+    }
+  }
+  ```
+- **Error Responses**:
+  - 400: Invalid input parameters
+  - 422: Content doesn't meet word count or academic standards
+  - 500: Internal generation error
+
+### Validate Content
+- **Endpoint**: `/api/content/validate`
+- **Method**: POST
+- **Description**: Validates content against academic and technical requirements
+- **Request Body**:
+  ```json
+  {
+    "content": "string (required)",
+    "contentType": "string (enum: 'module', 'chapter', 'overview', default: 'chapter')",
+    "targetWordCount": "integer (optional, default: 1850)",
+    "academicLevel": "string (enum: 'university-grade', default: 'university-grade')"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "valid": "boolean",
+    "validationResults": {
+      "wordCountValid": "boolean",
+      "wordCount": "integer",
+      "mdxSyntaxValid": "boolean",
+      "academicStandardsMet": "boolean",
+      "technicalAccuracyVerified": "boolean",
+      "details": {
+        "wordCount": "integer",
+        "targetRange": "string",
+        "syntaxErrors": "array of strings",
+        "academicIssues": "array of strings",
+        "technicalIssues": "array of strings"
+      }
+    }
+  }
+  ```
+- **Error Responses**:
+  - 400: Missing content parameter
+  - 500: Internal validation error
+
+## File Generation API
+
+### Create Module Directory Structure
+- **Endpoint**: `/api/files/create-module-structure`
+- **Method**: POST
+- **Description**: Creates the directory structure for a new module
+- **Request Body**:
+  ```json
+  {
+    "moduleId": "string (required)",
+    "moduleTitle": "string (required)",
+    "baseDir": "string (default: 'docs/modules')",
+    "includeChapterFiles": "boolean (default: true)"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": "boolean",
+    "modulePath": "string",
+    "chapterFiles": "array of strings",
+    "moduleOverviewFile": "string",
+    "filesCreated": "array of strings"
+  }
+  ```
+- **Error Responses**:
+  - 400: Missing required parameters
+  - 409: Directory already exists
+  - 500: File system error
+
+### Write Content to File
+- **Endpoint**: `/api/files/write-content`
+- **Method**: POST
+- **Description**: Writes generated content to MDX files
+- **Request Body**:
+  ```json
+  {
+    "filePath": "string (required)",
+    "content": "string (required)",
+    "overwrite": "boolean (default: false)"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": "boolean",
+    "filePath": "string",
+    "bytesWritten": "integer",
+    "fileExists": "boolean"
+  }
+  ```
+- **Error Responses**:
+  - 400: Missing required parameters
+  - 409: File exists and overwrite is false
+  - 500: File system error
+
+## Docusaurus Integration API
+
+### Update Sidebar Configuration
+- **Endpoint**: `/api/docusaurus/update-sidebar`
+- **Method**: POST
+- **Description**: Updates the sidebar.ts file to include new modules and chapters
+- **Request Body**:
+  ```json
+  {
+    "module": {
+      "id": "string (required)",
+      "title": "string (required)",
+      "chapters": [
+        {
+          "id": "string (required)",
+          "title": "string (required)",
+          "path": "string (required)"
+        }
+      ]
+    },
+    "sidebarFile": "string (default: 'sidebars.ts')"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": "boolean",
+    "sidebarUpdated": "boolean",
+    "sidebarFile": "string"
+  }
+  ```
+- **Error Responses**:
+  - 400: Missing required parameters
+  - 500: Sidebar update error
+
+### Validate Docusaurus Build
+- **Endpoint**: `/api/docusaurus/validate-build`
+- **Method**: POST
+- **Description**: Runs the Docusaurus build process to validate content
+- **Request Body**:
+  ```json
+  {
+    "buildDir": "string (default: 'build')",
+    "dryRun": "boolean (default: false)"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "buildSuccess": "boolean",
+    "errors": "array of strings",
+    "warnings": "array of strings",
+    "buildTime": "integer (ms)",
+    "outputDir": "string"
+  }
+  ```
+- **Error Responses**:
+  - 500: Build process failed
+
+## Error Definitions
+
+### Common Error Codes
+- 400: Bad Request - Invalid parameters provided
+- 404: Not Found - Requested resource doesn't exist
+- 409: Conflict - Resource already exists or conflicts with current state
+- 422: Unprocessable Entity - Content doesn't meet validation requirements
+- 500: Internal Server Error - Unexpected server error
+
+### Validation Error Types
+- WORD_COUNT_OUT_OF_RANGE: Content word count is outside 1700-2000 range
+- MDX_SYNTAX_ERROR: Content contains invalid MDX syntax
+- ACADEMIC_STANDARDS_NOT_MET: Content doesn't meet university-grade standards
+- TECHNICAL_INACCURACY: Content contains factually incorrect information
+- MISSING_FRONTMATTER: Required frontmatter fields are missing

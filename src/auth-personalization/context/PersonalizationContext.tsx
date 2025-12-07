@@ -9,7 +9,7 @@ interface PersonalizationContextType {
   clearPreferences: () => Promise<void>;
 }
 
-const PersonalizationContext = createContext<PersonalizationContextType | undefined>(undefined);
+export const PersonalizationContext = createContext<PersonalizationContextType | undefined>(undefined);
 
 export const PersonalizationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [preferences, setPreferences] = useState<PersonalizationPreference | null>(null);

@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { usePersonalization } from '../auth-personalization/context/PersonalizationContext';
 import { PersonalizationPreference } from '../auth-personalization/types';
-import { useNavigate } from 'react-router-dom';
+// If you are using react-router-dom v6 or above, keep this line as is.
+// If you are using react-router-dom v5, replace with:
+// import { useHistory } from 'react-router-dom';
+import { useHistory } from '@docusaurus/router';
 
 const programmingLanguages = [
   'Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C#', 'Go', 'Rust', 'Ruby', 'PHP'
@@ -15,7 +18,7 @@ const hardwareTypes = [
 
 const BackgroundQuestionsForm: React.FC = () => {
   const { savePreferences, loading } = usePersonalization();
-  const navigate = useNavigate();
+  const history = useHistory();
 
   const [selectedSoftware, setSelectedSoftware] = useState<string[]>([]);
   const [selectedHardware, setSelectedHardware] = useState<string[]>([]);
@@ -47,7 +50,7 @@ const BackgroundQuestionsForm: React.FC = () => {
 
     try {
       await savePreferences(preferences);
-      navigate('/'); // Navigate to homepage or personalized dashboard
+      history.push('/'); // Navigate to homepage or personalized dashboard
     } catch (err) {
       setError('Failed to save preferences. Please try again.');
       console.error('Error saving personalization preferences:', err);

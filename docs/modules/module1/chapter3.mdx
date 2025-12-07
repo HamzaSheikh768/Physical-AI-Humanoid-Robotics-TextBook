@@ -1,0 +1,746 @@
+---
+title: "Core Communication Primitives – Topics, Services, Actions, Parameters"
+description: "Comprehensive coverage of ROS 2's core communication primitives including topics, services, actions, and parameters, with practical examples and best practices."
+tags: ["ros2", "communication", "topics", "services", "actions", "parameters"]
+sidebar_label: "Chapter 3: Core Communication Primitives"
+slug: "/modules/module1/chapter3"
+keywords: ["ROS 2 Communication", "Topics", "Services", "Actions", "Parameters", "Message Passing"]
+---
+
+# Core Communication Primitives – Topics, Services, Actions, Parameters
+
+## Learning Objectives
+
+By the end of this chapter, you will be able to:
+- Implement and utilize all four core ROS 2 communication primitives
+- Choose the appropriate communication pattern for specific use cases
+- Design robust communication architectures using multiple primitives
+- Configure Quality of Service (QoS) settings for optimal performance
+- Debug and troubleshoot communication issues in ROS 2 systems
+
+## Introduction
+
+ROS 2 provides four fundamental communication primitives that form the backbone of robotic systems: topics, services, actions, and parameters. Each primitive serves a specific purpose and is optimized for different types of interactions between nodes. Understanding when and how to use each primitive is essential for building efficient, reliable, and maintainable robotic applications. This chapter explores each communication primitive in detail, providing practical examples and best practices for their implementation.
+
+## Topics: Asynchronous Publish/Subscribe Communication
+
+### Concept and Use Cases
+
+Topics in ROS 2 implement the publish/subscribe communication pattern, where:
+- Publishers send messages to topics without knowing who will receive them
+- Subscribers receive messages from topics without knowing who published them
+- Communication is asynchronous and decoupled in time
+- Multiple publishers and subscribers can exist for the same topic
+
+Topics are ideal for:
+- Sensor data streams (camera images, LiDAR scans, IMU readings)
+- Robot state information (joint positions, odometry, battery status)
+- Continuous control commands (velocity commands, motor positions)
+- Event notifications (obstacle detected, goal reached, error occurred)
+
+### Implementation Example
+
+```python
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
+
+class SensorProcessor(Node):
+    def __init__(self):
+        super().__init__('sensor_processor')
+
+        # Create subscriber for laser scan data
+        self.subscription = self.create_subscription(
+            LaserScan,
+            'scan',
+            self.laser_callback,
+            10  # Queue size
+        )
+
+        # Create publisher for velocity commands
+        self.cmd_vel_publisher = self.create_publisher(
+            Twist,
+            'cmd_vel',
+            10
+        )
+
+    def laser_callback(self, msg):
+        # Process laser scan data
+        min_distance = min(msg.ranges)
+
+        # Create and publish velocity command
+        cmd_vel = Twist()
+        if min_distance < 1.0:  # If obstacle is closer than 1 meter
+            cmd_vel.linear.x = 0.0  # Stop
+            cmd_vel.angular.z = 0.5  # Turn
+        else:
+            cmd_vel.linear.x = 0.5  # Move forward
+
+        self.cmd_vel_publisher.publish(cmd_vel)
+
+def main(args=None):
+    rclpy.init(args=args)
+    sensor_processor = SensorProcessor()
+    rclpy.spin(sensor_processor)
+    sensor_processor.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Quality of Service (QoS) Configuration
+
+QoS settings allow fine-tuning of topic behavior:
+
+```python
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+
+# For sensor data (frequent updates, acceptable to lose some messages)
+sensor_qos = QoSProfile(
+    depth=5,  # Keep 5 most recent messages
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,  # Accept message loss for performance
+    history=QoSHistoryPolicy.KEEP_LAST,  # Keep only recent messages
+    durability=QoSDurabilityPolicy.VOLATILE  # Don't store for late joiners
+)
+
+# For critical commands (must be delivered, keep all messages)
+command_qos = QoSProfile(
+    depth=10,  # Keep more messages
+    reliability=QoSReliabilityPolicy.RELIABLE,  # Ensure delivery
+    history=QoSHistoryPolicy.KEEP_LAST,  # Keep recent messages
+    durability=QoSDurabilityPolicy.VOLATILE  # Don't need persistence
+)
+
+# For configuration parameters (keep last value for late joiners)
+config_qos = QoSProfile(
+    depth=1,  # Only need the most recent value
+    reliability=QoSReliabilityPolicy.RELIABLE,  # Must be delivered
+    history=QoSHistoryPolicy.KEEP_LAST,  # Keep the latest value
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL  # Store for late joiners
+)
+```
+
+### Advanced Topic Features
+
+#### Message Filters
+
+For processing synchronized data from multiple sensors:
+
+```python
+from message_filters import ApproximateTimeSynchronizer, Subscriber
+import sensor_msgs.msg as sensor_msgs
+
+class MultiSensorProcessor(Node):
+    def __init__(self):
+        super().__init__('multi_sensor_processor')
+
+        # Create subscribers for different sensor types
+        image_sub = Subscriber(self, sensor_msgs.Image, 'camera/image_raw')
+        depth_sub = Subscriber(self, sensor_msgs.Image, 'camera/depth/image_raw')
+
+        # Synchronize messages based on timestamps
+        ats = ApproximateTimeSynchronizer(
+            [image_sub, depth_sub],
+            queue_size=10,
+            slop=0.1  # 100ms tolerance
+        )
+        ats.registerCallback(self.sync_callback)
+
+    def sync_callback(self, image_msg, depth_msg):
+        # Process synchronized image and depth data
+        self.get_logger().info(f'Processing synchronized data at {image_msg.header.stamp}')
+```
+
+## Services: Synchronous Request/Response Communication
+
+### Concept and Use Cases
+
+Services implement synchronous request/response communication where:
+- A client sends a request and waits for a response
+- The server processes the request and returns a response
+- Communication is synchronous and blocking
+- Only one client request is processed at a time (unless multi-threaded)
+
+Services are ideal for:
+- One-time configuration requests (set parameters, calibrate sensors)
+- Query operations (get robot status, retrieve map, check state)
+- Command execution with confirmation (move to position, take photo)
+- Validation and verification operations
+
+### Implementation Example
+
+```python
+import rclpy
+from rclpy.node import Node
+from example_interfaces.srv import AddTwoInts
+
+class CalculatorService(Node):
+    def __init__(self):
+        super().__init__('calculator_service')
+        self.srv = self.create_service(
+            AddTwoInts,
+            'add_two_ints',
+            self.add_two_ints_callback
+        )
+
+    def add_two_ints_callback(self, request, response):
+        response.sum = request.a + request.b
+        self.get_logger().info(f'Returning {request.a} + {request.b} = {response.sum}')
+        return response
+
+class CalculatorClient(Node):
+    def __init__(self):
+        super().__init__('calculator_client')
+        self.cli = self.create_client(AddTwoInts, 'add_two_ints')
+
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service not available, waiting again...')
+
+        self.send_request(2, 3)
+
+    def send_request(self, a, b):
+        request = AddTwoInts.Request()
+        request.a = a
+        request.b = b
+
+        future = self.cli.call_async(request)
+        future.add_done_callback(self.response_callback)
+
+    def response_callback(self, future):
+        response = future.result()
+        self.get_logger().info(f'Result: {response.sum}')
+        rclpy.shutdown()
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    service_node = CalculatorService()
+    client_node = CalculatorClient()
+
+    # Run both nodes
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(service_node)
+    executor.add_node(client_node)
+
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        service_node.destroy_node()
+        client_node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Service Best Practices
+
+1. **Keep services fast**: Long-running operations should use actions instead
+2. **Handle errors gracefully**: Return appropriate error codes
+3. **Use appropriate data types**: Choose message types that match your data
+4. **Consider timeout handling**: Implement client-side timeouts
+
+```python
+# Robust service client with timeout
+import rclpy
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from example_interfaces.srv import Trigger
+
+class RobustServiceClient(Node):
+    def __init__(self):
+        super().__init__('robust_service_client')
+        self.cli = self.create_client(Trigger, 'trigger_service')
+        self.future = None
+
+    def call_service_with_timeout(self, timeout_sec=5.0):
+        if not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().error('Service not available')
+            return None
+
+        request = Trigger.Request()
+        self.future = self.cli.call_async(request)
+
+        # Use a timer to implement timeout
+        self.timeout_timer = self.create_timer(
+            timeout_sec,
+            self.timeout_callback
+        )
+
+        self.future.add_done_callback(self.response_callback)
+        return self.future
+
+    def response_callback(self, future):
+        try:
+            response = future.result()
+            self.get_logger().info(f'Service response: {response.success}')
+            if self.timeout_timer is not None:
+                self.timeout_timer.cancel()
+            return response
+        except Exception as e:
+            self.get_logger().error(f'Service call failed: {e}')
+
+    def timeout_callback(self):
+        self.get_logger().error('Service call timed out')
+        if self.future is not None and not self.future.done():
+            # Note: Future cancellation is not directly supported in rclpy
+            self.get_logger().info('Future may still be executing')
+```
+
+## Actions: Asynchronous Goal-Oriented Communication
+
+### Concept and Use Cases
+
+Actions implement asynchronous goal-oriented communication where:
+- A client sends a goal and receives feedback during execution
+- The server reports progress and final result
+- Communication includes goal, feedback, and result phases
+- Supports preemption and cancellation
+
+Actions are ideal for:
+- Navigation to goals (move_base, navigate_to_pose)
+- Long-running processes (mapping, calibration, data collection)
+- Task execution with progress reporting
+- Operations that may be cancelled or preempted
+
+### Implementation Example
+
+```python
+import rclpy
+from rclpy.action import ActionServer, GoalResponse, CancelResponse
+from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+
+from example_interfaces.action import Fibonacci
+
+class FibonacciActionServer(Node):
+    def __init__(self):
+        super().__init__('fibonacci_action_server')
+
+        # Use reentrant callback group to handle multiple requests
+        callback_group = ReentrantCallbackGroup()
+
+        self._action_server = ActionServer(
+            self,
+            Fibonacci,
+            'fibonacci',
+            execute_callback=self.execute_callback,
+            callback_group=callback_group,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback
+        )
+
+    def goal_callback(self, goal_request):
+        # Accept all goals
+        self.get_logger().info('Received goal request')
+        return GoalResponse.ACCEPT
+
+    def cancel_callback(self, goal_handle):
+        # Accept all cancel requests
+        self.get_logger().info('Received cancel request')
+        return CancelResponse.ACCEPT
+
+    async def execute_callback(self, goal_handle):
+        self.get_logger().info('Executing goal...')
+
+        # Get goal data
+        order = goal_handle.request.order
+
+        # Create feedback and result messages
+        feedback_msg = Fibonacci.Feedback()
+        result_msg = Fibonacci.Result()
+
+        # Initialize Fibonacci sequence
+        feedback_msg.sequence = [0, 1]
+
+        # Execute the action
+        for i in range(1, order):
+            # Check if there's a cancel request
+            if goal_handle.is_cancel_requested:
+                result_msg.sequence = feedback_msg.sequence
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return result_msg
+
+            # Update sequence
+            feedback_msg.sequence.append(
+                feedback_msg.sequence[i] + feedback_msg.sequence[i-1]
+            )
+
+            # Publish feedback
+            goal_handle.publish_feedback(feedback_msg)
+            self.get_logger().info(f'Feedback: {feedback_msg.sequence}')
+
+            # Sleep to simulate work
+            from time import sleep
+            sleep(1)
+
+        # Check if goal was canceled during execution
+        if goal_handle.is_cancel_requested:
+            result_msg.sequence = feedback_msg.sequence
+            goal_handle.canceled()
+            self.get_logger().info('Goal canceled during execution')
+            return result_msg
+
+        # Complete successfully
+        result_msg.sequence = feedback_msg.sequence
+        goal_handle.succeed()
+        self.get_logger().info('Goal succeeded')
+
+        return result_msg
+
+class FibonacciActionClient(Node):
+    def __init__(self):
+        super().__init__('fibonacci_action_client')
+        self._action_client = ActionClient(
+            self,
+            Fibonacci,
+            'fibonacci'
+        )
+
+    def send_goal(self, order):
+        goal_msg = Fibonacci.Goal()
+        goal_msg.order = order
+
+        self._action_client.wait_for_server()
+
+        # Send goal and get future
+        send_goal_future = self._action_client.send_goal_async(
+            goal_msg,
+            feedback_callback=self.feedback_callback
+        )
+
+        send_goal_future.add_done_callback(self.goal_response_callback)
+
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().info('Goal rejected')
+            return
+
+        self.get_logger().info('Goal accepted')
+
+        # Get result future
+        get_result_future = goal_handle.get_result_async()
+        get_result_future.add_done_callback(self.get_result_callback)
+
+    def feedback_callback(self, feedback_msg):
+        self.get_logger().info(f'Received feedback: {feedback_msg.feedback.sequence[-1]}')
+
+    def get_result_callback(self, future):
+        result = future.result().result
+        self.get_logger().info(f'Result: {result.sequence}')
+        rclpy.shutdown()
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    action_server = FibonacciActionServer()
+    action_client = FibonacciActionClient()
+
+    # Send a goal from the client
+    action_client.send_goal(5)
+
+    # Use multi-threaded executor to run both nodes
+    executor = MultiThreadedExecutor()
+    executor.add_node(action_server)
+    executor.add_node(action_client)
+
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        action_server.destroy_node()
+        action_client.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+## Parameters: Configuration and Runtime Adjustment
+
+### Concept and Use Cases
+
+Parameters in ROS 2 provide a mechanism for:
+- Configuration of nodes at runtime
+- Dynamic adjustment of algorithm parameters
+- Sharing configuration data between nodes
+- Storing persistent settings
+
+Parameters are ideal for:
+- Sensor calibration values
+- Algorithm thresholds and limits
+- Robot physical properties (mass, dimensions)
+- Operational modes and settings
+
+### Implementation Example
+
+```python
+import rclpy
+from rclpy.node import Node
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+
+class ParameterizedNode(Node):
+    def __init__(self):
+        super().__init__('parameterized_node')
+
+        # Declare parameters with default values and descriptions
+        self.declare_parameter(
+            'robot_speed',
+            1.0,
+            ParameterDescriptor(
+                name='robot_speed',
+                type=ParameterType.PARAMETER_DOUBLE,
+                description='Maximum speed of the robot in m/s',
+                additional_constraints='Must be positive',
+                floating_point_range=[rclpy.Parameter.FloatingPointRange(from_value=0.0, to_value=10.0)]
+            )
+        )
+
+        self.declare_parameter(
+            'safety_distance',
+            0.5,
+            ParameterDescriptor(
+                name='safety_distance',
+                type=ParameterType.PARAMETER_DOUBLE,
+                description='Minimum safe distance to obstacles in meters',
+                additional_constraints='Must be positive'
+            )
+        )
+
+        self.declare_parameter(
+            'debug_mode',
+            False,
+            ParameterDescriptor(
+                name='debug_mode',
+                type=ParameterType.PARAMETER_BOOL,
+                description='Enable debug output'
+            )
+        )
+
+        # Get parameter values
+        self.robot_speed = self.get_parameter('robot_speed').value
+        self.safety_distance = self.get_parameter('safety_distance').value
+        self.debug_mode = self.get_parameter('debug_mode').value
+
+        # Set up parameter change callback
+        self.add_on_set_parameters_callback(self.parameter_callback)
+
+        # Create a timer to periodically check parameter values
+        self.timer = self.create_timer(1.0, self.timer_callback)
+
+    def parameter_callback(self, params):
+        """Callback for parameter changes"""
+        for param in params:
+            if param.name == 'robot_speed' and param.type == ParameterType.PARAMETER_DOUBLE:
+                if param.value > 0.0 and param.value <= 10.0:
+                    self.robot_speed = param.value
+                    self.get_logger().info(f'Robot speed updated to: {param.value}')
+                    return rclpy.node.SetParametersResult(successful=True)
+                else:
+                    self.get_logger().error('Invalid robot speed value')
+                    return rclpy.node.SetParametersResult(successful=False)
+
+            elif param.name == 'safety_distance' and param.type == ParameterType.PARAMETER_DOUBLE:
+                if param.value > 0.0:
+                    self.safety_distance = param.value
+                    self.get_logger().info(f'Safety distance updated to: {param.value}')
+                    return rclpy.node.SetParametersResult(successful=True)
+                else:
+                    self.get_logger().error('Invalid safety distance value')
+                    return rclpy.node.SetParametersResult(successful=False)
+
+            elif param.name == 'debug_mode' and param.type == ParameterType.PARAMETER_BOOL:
+                self.debug_mode = param.value
+                state = 'enabled' if param.value else 'disabled'
+                self.get_logger().info(f'Debug mode {state}')
+                return rclpy.node.SetParametersResult(successful=True)
+
+        return rclpy.node.SetParametersResult(successful=True)
+
+    def timer_callback(self):
+        """Timer callback that uses current parameter values"""
+        if self.debug_mode:
+            self.get_logger().info(
+                f'Current settings - Speed: {self.robot_speed}, '
+                f'Safety distance: {self.safety_distance}, '
+                f'Debug: {self.debug_mode}'
+            )
+
+def main(args=None):
+    rclpy.init(args=args)
+    parameterized_node = ParameterizedNode()
+    rclpy.spin(parameterized_node)
+    parameterized_node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Parameter Best Practices
+
+1. **Use appropriate parameter types**: Choose the correct type for validation
+2. **Provide meaningful descriptions**: Document what each parameter does
+3. **Set reasonable constraints**: Use ranges and validation where appropriate
+4. **Handle parameter changes gracefully**: Update behavior when parameters change
+5. **Use parameter files**: Store configurations in YAML files for consistency
+
+```yaml
+# Example parameter file: config/robot_params.yaml
+/**:
+  ros__parameters:
+    robot_speed: 1.0
+    safety_distance: 0.5
+    debug_mode: false
+    sensor_ranges:
+      min: 0.1
+      max: 10.0
+    operational_modes:
+      default: "normal"
+      available: ["normal", "safe", "debug"]
+```
+
+## Communication Pattern Selection Guidelines
+
+### When to Use Each Primitive
+
+| Scenario | Recommended Primitive | Rationale |
+|----------|----------------------|-----------|
+| Sensor data streaming | Topic | Continuous, asynchronous data flow |
+| One-time configuration | Service | Synchronous request/response |
+| Long-running task with progress | Action | Goal-oriented with feedback |
+| Runtime configuration | Parameter | Dynamic adjustment of settings |
+| Event notifications | Topic | Asynchronous broadcast to interested parties |
+| Command with confirmation | Service | Immediate response required |
+| Complex task with cancellation | Action | Supports preemption and detailed status |
+
+### Hybrid Communication Architectures
+
+Most robotic systems use multiple communication primitives together:
+
+```python
+class NavigationSystem(Node):
+    def __init__(self):
+        super().__init__('navigation_system')
+
+        # Topics for continuous data
+        self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        self.laser_sub = self.create_subscription(LaserScan, 'scan', self.laser_callback, 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+
+        # Service for immediate queries
+        self.get_path_srv = self.create_service(GetPath, 'get_path', self.get_path_callback)
+
+        # Action for goal-oriented navigation
+        self.nav_action_server = ActionServer(
+            self, NavigateToPose, 'navigate_to_pose', self.execute_navigation
+        )
+
+        # Parameters for configuration
+        self.declare_parameter('max_speed', 0.5)
+        self.declare_parameter('min_distance', 0.3)
+
+    def odom_callback(self, msg):
+        # Update robot position continuously
+        self.current_pose = msg.pose.pose
+
+    def execute_navigation(self, goal_handle):
+        # Execute navigation action with feedback
+        # Uses topics for sensor data and publishing commands
+        # Reports progress through action feedback
+        pass
+```
+
+## Debugging and Monitoring Communication
+
+### Built-in Tools
+
+ROS 2 provides several tools for monitoring communication:
+
+```bash
+# List all topics
+ros2 topic list
+
+# Echo messages on a topic
+ros2 topic echo /topic_name
+
+# List all services
+ros2 service list
+
+# Call a service
+ros2 service call /service_name service_type "{request_field: value}"
+
+# List all actions
+ros2 action list
+
+# Send an action goal
+ros2 action send_goal /action_name action_type "{goal_field: value}"
+
+# List all parameters
+ros2 param list
+
+# Get parameter value
+ros2 param get /node_name parameter_name
+```
+
+### Custom Monitoring
+
+```python
+class CommunicationMonitor(Node):
+    def __init__(self):
+        super().__init__('communication_monitor')
+
+        # Track message rates
+        self.message_counts = {}
+        self.last_counts = {}
+
+        # Create timer to periodically report communication status
+        self.timer = self.create_timer(1.0, self.monitor_callback)
+
+    def monitor_callback(self):
+        """Monitor communication health"""
+        current_counts = self.get_message_counts()
+
+        for topic, count in current_counts.items():
+            if topic in self.last_counts:
+                rate = count - self.last_counts[topic]
+                if rate == 0:
+                    self.get_logger().warning(f'No messages on {topic} - possible communication issue')
+                elif rate > 1000:  # Adjust threshold as needed
+                    self.get_logger().info(f'High message rate on {topic}: {rate} Hz')
+
+            self.last_counts[topic] = count
+
+    def get_message_counts(self):
+        # Implementation to get message counts for monitoring
+        pass
+```
+
+## Summary
+
+ROS 2's four core communication primitives—topics, services, actions, and parameters—provide a comprehensive toolkit for building robust robotic systems. Topics enable asynchronous data streaming, services provide synchronous request/response interactions, actions support goal-oriented operations with feedback, and parameters allow for dynamic configuration. Understanding when and how to use each primitive is essential for designing efficient, maintainable, and reliable robotic applications. The combination of these primitives enables complex robotic behaviors while maintaining modularity and separation of concerns.
+
+## Key Takeaways
+
+- Topics are best for continuous data streams and event notifications
+- Services are ideal for synchronous operations that return a result
+- Actions are designed for long-running tasks with progress feedback
+- Parameters provide runtime configuration and adjustment capabilities
+- Effective robotic systems often combine multiple communication primitives
+- Quality of Service settings allow fine-tuning of communication behavior
+- Built-in tools and custom monitoring help maintain communication health
+
+## References and Further Reading
+
+1. ROS 2 Communication Concepts: https://docs.ros.org/en/rolling/Concepts/About-Topics-Services-Actions-Parameters.html
+2. Quality of Service in ROS 2: https://docs.ros.org/en/rolling/Concepts/About-Quality-of-Service-Settings.html
+3. "Programming Robots with ROS" by Morgan Quigley et al.
+4. "ROS Robot Programming" by Kim and Park

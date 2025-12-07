@@ -164,6 +164,11 @@ const config: Config = {
               label: "Capstone",
               to: "/docs/capstone",
             },
+          ],
+        },
+        {
+          title: "Resources",
+          items: [
             {
               label: "Conclusion",
               to: "/docs/conclusion",
@@ -174,17 +179,12 @@ const config: Config = {
           title: "More",
           items: [
             {
-              label: "Blog",
-              to: "/blog",
-            },
-          ],
-        },
-        {
-          title: "Social",
-          items: [
-            {
               label: "GitHub",
               href: "https://github.com/hamzasheikh768/physical-ai-humanoid-robotics-textbook/",
+            },
+            {
+              label: 'Project Constitution',
+              href: 'https://github.com/hamzasheikh768/physical-ai-humanoid-robotics-textbook/blob/main/.specify/memory/constitution.md',
             },
           ],
         },
